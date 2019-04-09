@@ -4,7 +4,7 @@ from twitchbot import sql_commands
 class Viewer:
     def __init__(self):
         self.uid = ''
-        self.rank_points = 0
+        self.rankpoints = 0
 
         self.join_message_check = None  # implemented
         # ^ if None then not checked yet, if False then no message
@@ -13,8 +13,12 @@ class Viewer:
 
         self.points = 0  # points should be loaded on creation and updated/written periodically
         self.seconds = {}  # key = each game, value = seconds
-        self.chat = []  # implemented, dont call db
-        self.chat_line_dict = {}  # implemented, might be broken
+        self.chat = []  # implemented, list of username, time of message, game, date
+        self.chat_line_dict = {}  # implemented, just adds amount of chatlines together as a number for each game
+
+        self.invited_by = None
+
+        self.old_uid = 0
 
 
 user_ranks = {'Larvae': 120, 'Drone': 240, 'Zergling': 480, 'Baneling': 960, 'Overlord': 1920, 'Roach': 3840,
@@ -35,7 +39,7 @@ def create_all_viewerobjects(getviewers, general):
                 general.viewer_objects[viewer] = create_viewer
                 general.viewer_objects[viewer].uid = sql_commands.get_uid_from_username(viewer)
                 if general.viewer_objects[viewer].uid is None or general.viewer_objects[viewer].uid == 'None':
-                    sql_commands.check_if_user_exists(general.get_viewers_func)
+                    pass
 
 
 def add_one_viewerobject(general, viewer):  # saving viewer objects to general class variable
@@ -45,7 +49,7 @@ def add_one_viewerobject(general, viewer):  # saving viewer objects to general c
         general.viewer_objects[create_viewer.name] = create_viewer
         general.viewer_objects[viewer].uid = sql_commands.get_uid_from_username(viewer)
         if general.viewer_objects[viewer].uid is None or general.viewer_objects[viewer].uid == 'None':
-            sql_commands.check_if_user_exists(general.get_viewers_func)
+            pass
 
 
 def time_rank_movement(viewer):  # this part should be every couple minutes while messages should be instant
@@ -70,9 +74,9 @@ def chat_rank_movement(viewer, message, starting_val):  # this entire thing shou
                 viewer.rankpoints += .5
 
 
-def invite_rank_movement(inviter_viewer, invited_viewer):
-    inviter_viewer.rankpoints += 10
-    invited_viewer.rankpoints += 5
+def invite_rank_movement(general, inviter_viewer, invited_viewer):
+    general.viewer_objects[inviter_viewer].rankpoints += 10
+    general.viewer_objects[invited_viewer].rankpoints += 5
 
 
 # for sublist in uid, chatcounter += 1, then write that number to db
@@ -95,7 +99,7 @@ def save_hours_for_sql(getviewers, game, seconds, general):
         else:
             uid = sql_commands.get_uid_from_username(username)
             if uid is False:
-                sql_commands.check_if_user_exists(getviewers)
+                pass
 
             if game not in general.viewer_objects[username].seconds:
                 general.viewer_objects[username].seconds[game] = 0

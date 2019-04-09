@@ -27,7 +27,7 @@ starting_val = '-'
 
 def handle_commands(s, username, message, general):
 
-    if message.startswith(starting_val + 'pythoncommands'):
+    if message.startswith(starting_val + 'help'):
         twitchchat.chat(s, python_commands())
 
     elif message.startswith(starting_val + "hello"):
@@ -39,27 +39,33 @@ def handle_commands(s, username, message, general):
     elif message.startswith(starting_val + "bm"):
         twitchchat.chat(s, bm(username))
 
-    elif message.startswith(starting_val + 'github'):
-        twitchchat.chat(s, github())
-
     elif message.startswith(starting_val + 'feelgood'):
         twitchchat.chat(s, feel_good(username))
 
-    elif message.startswith(starting_val + 'joinmessage'):
+    elif message.startswith(starting_val + 'joinmessage'):  # if joinmessage is empty pass
         try:
-            message_regex = re.search(r"(" + starting_val + "joinmessage .+)", message)
-            join_message = message_regex.group(0).split(" ", 1)[1].strip() + ' - ' + username
-
             conn = sqlite3.connect(sql_file())
             c = conn.cursor()
-            c.execute("UPDATE ViewerData Set Join_Message = ? WHERE User_Name = ?", (join_message, username))
-            twitchchat.chat(s, username + ', your message has been saved!')
-            if username in general.no_joinmessage:
-                general.no_joinmessage.remove(username)
-            conn.commit()
-            conn.close()
+            sql_points = c.execute('SELECT Points FROM ViewerData WHERE User_Name=?', (username,))
+            str_points = sql_points.fetchone()[0]
+            if str_points + general.viewer_objects[username].points < 1000:
+                twitchchat.chat(s, 'Sorry you need 1,000 points to get a joinmessage!')
+
+            else:
+                general.viewer_objects[username].points -= 1000
+
+                message_regex = re.search(r"(" + starting_val + "joinmessage .+)", message)
+                join_message = message_regex.group(0).split(" ", 1)[1].strip() + ' - ' + username
+                general.viewer_objects[username].join_message_check = join_message
+                twitchchat.chat(s, username + ', your message has been saved at the cost of 1000 points!')
+                if username in general.no_joinmessage:
+                    general.no_joinmessage.remove(username)
         except AttributeError:
             pass
+
+    elif message.startswith(starting_val + "remove_joinmessage"):  # make this worth nothing
+        general.viewer_objects[username].join_message_check = "remove_joinmessage"
+        twitchchat.chat(s, 'Your joinmessage has been removed, you do not get refunded your 1000 points')
 
     elif message.startswith(starting_val + 'thecastlegame'):
         twitchchat.whisper(s, '.w ' + username + ' A test whisper message')
@@ -120,11 +126,17 @@ def handle_commands(s, username, message, general):
                 elif game == 'SC2':
                     game = 'StarCraftII'
 
-                sql_game = c1.execute('SELECT Hours FROM Hours WHERE Game=? AND UID=?', (game, string_uid[0]))
+                sql_game = c1.execute('SELECT Hours FROM Hours WHERE Game=? AND UID=?', (game.capitalize(), string_uid[0]))
                 string_game = sql_game.fetchall()
                 for i in string_game:
                     hl.append(i[0])
-                hl = round((sum(hl)/60)/60, 2)
+
+                current_seconds = general.viewer_objects[username].seconds.get(game)
+                if current_seconds is None:
+                    current_seconds = 0
+
+                hl = round((sum(hl) / 60) / 60 + (current_seconds / 60) / 60, 2)
+
                 twitchchat.chat(s, username + ' your hours for ' + game + ' is ' + str(hl))
                 count += 1
 
@@ -134,9 +146,14 @@ def handle_commands(s, username, message, general):
                     sql_hours = c1.execute("SELECT Hours FROM Hours WHERE UID=? AND Game NOT IN ('Offline')",
                                            (string_uid[0],))
                     string_hours = sql_hours.fetchall()
+
+                    total_seconds = 0
+                    for game in general.viewer_objects[username].seconds:
+                        total_seconds += general.viewer_objects[username].seconds.get(game)
+
                     for i in string_hours:
                         hours_list.append(i[0])
-                    total_hours = round((sum(hours_list)/60)/60, 2)
+                    total_hours = round((sum(hours_list)/60)/60 + (total_seconds / 60) / 60, 2)
                     twitchchat.chat(s, username + ' your total online hours are: ' + str(total_hours))
                     count += 1
                 except TypeError:
@@ -164,7 +181,11 @@ def handle_commands(s, username, message, general):
             else:
                 chat_list.append(i[0])
         total_chatlines = sum(chat_list)
-        twitchchat.chat(s, username + ' your total chatlines are ' + str(total_chatlines))
+        all_chatlines = 0
+        for game in general.viewer_objects[username].chat_line_dict:
+            all_chatlines += general.viewer_objects[username].chat_line_dict[game]
+        twitchchat.chat(s, username + ' your total chatlines are ' + str(total_chatlines + all_chatlines))
+        # stopped here
 
         conn1.close()
         conn2.close()
@@ -179,7 +200,9 @@ def handle_commands(s, username, message, general):
         string_user_points = sql_user_points.fetchone()
         string_user_points = string_user_points[0]
         string_user_points = round(string_user_points, 2)
-        twitchchat.chat(s, username + " you have " + str(string_user_points) + " points!")
+        twitchchat.chat(s, username + " you have " + str(string_user_points +
+                                                         general.viewer_objects[username].points) +
+                        " points!")
 
     elif message.startswith(starting_val + "compare"):
         #try:
@@ -239,7 +262,8 @@ def handle_commands(s, username, message, general):
 
                     if keyword == 'Chat':
                         difference = abs(difference)
-                        twitchchat.chat(s, username + " has " + str(sum1_total) + " chatlines, " + sec_username + " has " +
+                        twitchchat.chat(s, username + " has " + str(sum1_total) + " chatlines, " + sec_username +
+                                        " has " +
                                         str(sum2_total) + " chatlines, that's a difference of " + str(difference))
                     elif keyword == 'Hours':
                         difference = abs(round(difference/3600, 2))
@@ -250,7 +274,7 @@ def handle_commands(s, username, message, general):
 
                 conn1.close()
                 conn2.close()
-        #except (TypeError, sqlite3.OperationalError, IndexError) as e:
+        # except (TypeError, sqlite3.OperationalError, IndexError) as e:
         #    print(e, 237)
 
     elif message.startswith(starting_val + "top"):
@@ -337,7 +361,7 @@ def handle_commands(s, username, message, general):
             sql_mod_points = c.execute("SELECT Points FROM ViewerData WHERE User_Name = ?", (username,))
             string_mod_points = sql_mod_points.fetchone()
             mod_points = int(string_mod_points[0]) - random.randrange(30, 500)
-            c.execute("UPDATE ViewerData SET Points = ? WHERE User_Name = ?", (mod_points, username))
+            general.viewer_objects[username].points -= 10
             twitchchat.chat(s, "Whoops, looks like you lost some points there " + username + "! You went from " +
                             str(round(string_mod_points[0], 2)) + " to " + str(round(mod_points, 2)))
             conn.commit()
@@ -353,46 +377,51 @@ def handle_commands(s, username, message, general):
             or message.startswith(starting_val + 'dishonor'):
         try:
             keyword = ((message.split()[1]).strip()).lower()
+            print(371, keyword)
             conn = sqlite3.connect(sql_file())
             c = conn.cursor()
-            sql_check = c.execute("SELECT Invited_By FROM ViewerData WHERE User_Name = ?", (username,))
-            string_check = sql_check.fetchone()
+            if message.startswith(starting_val + "invite"):
+                # need to check in database then check their
+                sql_check = c.execute("SELECT Invited_By FROM ViewerData WHERE User_Name=?", (username,))
+                string_check = sql_check.fetchone()
 
-            if string_check[0] is None:
-                sql_all_names = c.execute("SELECT User_Name FROM ViewerData")
-                string_all_names = sql_all_names.fetchall()
-                all_names_list = []
-                for i in string_all_names:
-                    all_names_list.append(i[0])
-                if keyword not in all_names_list:
-                    twitchchat.chat(s, "It looks like you spelled your inviters name wrong! Please try again " +
-                                    username)
-                if message.startswith(starting_val + "invite"):
-                    if keyword == username:
+                if string_check[0] is None:  # if cell is empty
+                    sql_all_names = c.execute("SELECT User_Name FROM ViewerData")
+                    string_all_names = sql_all_names.fetchall()
+                    all_names_list = []
+                    for i in string_all_names:
+                        all_names_list.append(i[0])
+                    if keyword not in all_names_list:
+                        twitchchat.chat(s, "It looks like you spelled the persons name wrong! Please try again " +
+                                        username)
+
+                    elif keyword == username:
                         twitchchat.chat(s, "Nice try " + username)
+                        general.viewer_objects[username].points -= 10
                         twitchchat.chat(s, "/timeout " + username + " 10")
+
+                    elif general.viewer_objects[username].invited_by is not None or string_check[0] is not None:
+                        twitchchat.chat(s, 'You\'ve already been invited by someone')
                     else:
-                        general.viewer_objects[username].points += 50  # this prob doesnt work
-                        keyword.points += 100
-                        # the below should be removed and all updates should happen at once
-                        """c.execute("UPDATE ViewerData SET Points = Points + 50 WHERE User_Name = ?", 
-                                  (username.lower(),))
-                        c.execute("UPDATE ViewerData SET Points = Points + 100 WHERE User_Name = ?", 
-                                  (keyword.lower(),))
-                        c.execute("UPDATE ViewerData Set Invited_By = ? WHERE User_Name = ?", 
-                                  (keyword, username.lower(),))"""
-                        viewerclass.invite_rank_movement(inviter_viewer=username, invited_viewer=keyword)
+                        general.viewer_objects[username].invited_by = keyword
+                        print(398, general.viewer_objects[username].invited_by)
+                        general.viewer_objects[username].points += 50
+                        general.viewer_objects[keyword].points += 100
+                        viewerclass.invite_rank_movement(general=general,
+                                                         inviter_viewer=username,
+                                                         invited_viewer=keyword)
                         twitchchat.chat(s, "Points added to you " + username + " and " + keyword)
-                elif message.startswith(starting_val + 'honor'):  # honor and dishonor don't work yet
-                    keyword.rankpoints += 100
-                    username.rankpoints += 25
-                elif message.startswith(starting_val + 'dishonor'):
-                    keyword.rankpoints -= 100
-                    username.rankpoints += 25
+
+            elif message.startswith(starting_val + 'honor'):  # honor and dishonor don't work yet
+                keyword.rankpoints += 100
+                username.rankpoints += 25
+            elif message.startswith(starting_val + 'dishonor'):
+                keyword.rankpoints -= 100
+                username.rankpoints += 25
             conn.commit()
             conn.close()
         except IndexError:
-            pass
+            twitchchat.chat(s, 'You must include a name when doing -invite')  # did not include a name with command
 
     elif message.startswith(starting_val + "reward"):
         rewardval = rewards(username=username)
@@ -401,24 +430,68 @@ def handle_commands(s, username, message, general):
         else:
             twitchchat.chat(s, ".w " + username + " Your code is " + rewardval)
 
-    elif message.startswith(starting_val + 'guessnumber'):
-        if general.randnum == -1:
-            general.create_num()
-        else:
-            guess_regex = re.search(r"(guessnumber \d+)", message)
-            try:
-                guess = guess_regex.group(0).split(" ")[1]
-                if int(guess) > int(general.our_val):
-                    twitchchat.chat(s, 'Number is too high! Try guessing lower ' + username)
+    elif message.startswith(starting_val + 'gn'):
+        guess_regex = re.search(f"({starting_val}gn \d+)", message)
+        try:
+            guess = guess_regex.group(0).split(" ")[1]
+            if int(guess) > int(general.randnum):
+                twitchchat.chat(s, 'Number is too high! Try guessing lower ' + username)
 
-                elif int(guess) < int(general.our_val):
-                    twitchchat.chat(s, 'Number is too low! Try guessing higher ' + username)
+            elif int(guess) < int(general.randnum):
+                twitchchat.chat(s, 'Number is too low! Try guessing higher ' + username)
 
-                elif int(guess) == int(general.our_val):
-                    twitchchat.chat(s, "Nice guess! The answer was " + str(general.our_val))
-                    general.create_num()
-            except AttributeError:
-                twitchchat.chat(s, 'You have to include a number ' + username)
+            elif int(guess) == int(general.randnum):
+                twitchchat.chat(s, "Nice guess! The answer was " + str(general.randnum))
+                general.create_num()
+        except AttributeError:
+            twitchchat.chat(s, 'You have to include a number ' + username)
+
+    elif message.startswith(starting_val + 'update_id'):
+        keyword = ((message.split()[1]).strip())
+        try:
+            conn = sqlite3.connect(sql_file())
+            c = conn.cursor()
+            sql_uid_check = c.execute('SELECT UID FROM ViewerData WHERE UID=?', (keyword,))
+            str_uid_check = sql_uid_check.fetchone()
+            if str_uid_check is None:
+                twitchchat.whisper(s, '.w ' + username + ' Sorry it looks like you typed in your UID incorrectly')
+            else:
+                twitchchat.whisper(s, '.w ' + username + ' Are you sure you want to do this? Some of your current data'
+                                                        'Such as your join date, invited by, and join game will be '
+                                                        'overwritten. Do -confirmed_transfer {your id here} '
+                                                        '(no brackets) if you\'re sure. Each time you do this is costs'
+                                                        ' double the last time starting at 200 points.')
+        except sqlite3.DatabaseError:
+            twitchchat.whisper(s, '.w ' + username + 'Sorry it looks like you typed in your UID incorrectly')
+
+    elif message.startswith(starting_val + '-confirmed_transfer'):
+        conn = sqlite3.connect(sql_file())
+        c = conn.cursor()
+
+        try:
+            keyword = ((message.split()[1]).strip())
+            old_sql_points = c.execute('SELECT Points FROM ViewerData WHERE UID=?', (keyword,))
+            old_str_points = old_sql_points.fetchone()
+            new_sql_points = c.execute('SELECT Points FROM ViewerData WHERE User_Name=?', (username,))
+            new_str_points = new_sql_points.fetchone()
+            combined_points = old_str_points + new_str_points
+            sql_point_check = c.execute('SELECT Updating_Name_Point_Deduction FROM ViewerData WHERE UID=?', (keyword,))
+            str_point_check = sql_point_check.fetchone()
+
+            if general.viewer_objects[username].old_uid != 0:
+                twitchchat.whisper(s, '.w ' + username + 'Sorry it looks like a transfer is already in process')
+
+            if combined_points - str_point_check < 0:
+                twitchchat.whisper(s, '.w ' + username + 'Sorry you don\'t have enough combined points to do a '
+                                                         'transfer')
+            else:
+                general.old_uid = keyword
+                twitchchat.whisper(s, '.w ' + username + 'Data Transferring. Please be patient, it will take 10-20 '
+                                                         'minutes for your data to merge')
+        except sqlite3.DatabaseError:
+            twitchchat.whisper(s, '.w ' + username + 'Sorry it looks like you typed in your UID incorrectly')
+
+        conn.close()
 
 
 def hello():
@@ -468,10 +541,6 @@ def bm(username):
 
 def python_commands():
     return 'https://giphertius.wordpress.com/2018/02/20/giphertius-python-commands/'
-
-
-def github():
-    return 'https://github.com/ZERG3R/PythonBot'
 
 
 def feel_good(username):

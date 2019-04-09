@@ -35,10 +35,6 @@ class General:
     def __init__(self):
         self.print_chat_count = 0
 
-        self.chattime_start = time.time()
-        self.chattime_end = 0
-        self.chattime_difference = 0
-
         self.hourstime_start = time.time()
         self.hourstime_end = 0
         self.hourstime_difference = 0
@@ -59,9 +55,9 @@ class General:
         self.randnum = -1
 
     def create_num(self):
-        randnum = random.randrange(0, 100)
-        self.our_val = randnum
-        return self.our_val
+        ourval = random.randrange(0, 100)
+        self.randnum = ourval
+        return self.randnum
 
 
 general = General()
@@ -127,20 +123,22 @@ def get_viewers():
     adapter = HTTPAdapter(max_retries=retry)
     session.mount('http://', adapter)
     session.mount('https://', adapter)
-    channel_json = session.get(url='https://tmi.twitch.tv/group/user/' +
-                                   encryption_key.decrypted_chan +
-                                   '/chatters').json()
+    try:
+        channel_json = session.get(url='https://tmi.twitch.tv/group/user/' + encryption_key.decrypted_chan
+                                       + '/chatters').json()
 
-    broadcaster = (channel_json['chatters']['broadcaster'])
-    viewers = (channel_json['chatters']['viewers'])
-    moderators = (channel_json['chatters']['moderators'])
-    staff = (channel_json['chatters']['staff'])
-    vips = (channel_json['chatters']['vips'])
-    global_mods = (channel_json['chatters']['global_mods'])
-    admins = (channel_json['chatters']['admins'])
-    viewers_list = viewers + staff + vips + global_mods + admins
-    viewers_and_mods = [viewers_list, moderators + broadcaster]
-    return viewers_and_mods
+        broadcaster = (channel_json['chatters']['broadcaster'])
+        viewers = (channel_json['chatters']['viewers'])
+        moderators = (channel_json['chatters']['moderators'])
+        staff = (channel_json['chatters']['staff'])
+        vips = (channel_json['chatters']['vips'])
+        global_mods = (channel_json['chatters']['global_mods'])
+        admins = (channel_json['chatters']['admins'])
+        viewers_list = viewers + staff + vips + global_mods + admins
+        viewers_and_mods = [viewers_list, moderators + broadcaster]
+        return viewers_and_mods
+    except TypeError:
+        print('TYPERROR')
     # this had multiple try/excepts (typeerror and valueerror, might crash now)
 
 
@@ -155,11 +153,6 @@ def saveviewertimethread():
     t4.start()
 
 
-def functionschatthread():
-    t2 = threading.Thread(target=chatfunctions, args=())
-    t2.start()
-
-
 def saveviewerchatthread():
     t5 = threading.Thread(target=saveviewerchat, args=())
     t5.start()
@@ -170,7 +163,7 @@ def saveviewerchatthread():
 def saveviewertime():
     while True:
         # error_log()
-        #print(168, general.total_hourstime)
+        # print(168, general.total_hourstime)
         general.hourstime_end = time.time()
         general.hourstime_difference = general.hourstime_end - general.hourstime_start
 
@@ -192,26 +185,29 @@ def saveviewertime():
 
                     general.hourstime_start = general.hourstime_end
 
-                    for viewer in general.viewer_objects:
-                        if general.viewer_objects[viewer].join_message_check is False:
-                            pass
-                        else:
-                            general.viewer_objects[viewer].time_before_last_seen += general.hourstime_difference
-                            if general.viewer_objects[viewer].time_before_last_seen > 2400:
-                                sql_commands.welcome_viewers(
-                                    s=general.oursocket,
-                                    general=general,
-                                    getviewers=general.get_viewers_func[0] +
-                                    general.get_viewers_func[1])
 
-
-def timefunctions():
+def timefunctions():  # make a counter here so not multiple saves occur
     if general.get_viewers_func is False:
         general.get_viewers_func = get_viewers()
 
     while True:
         if int(general.total_hourstime) % 10 == 0:
             general.get_viewers_func = get_viewers()
+            sql_commands.check_if_user_exists(
+                get_viewers=(
+                        general.get_viewers_func[0] +
+                        general.get_viewers_func[1]))
+
+            for viewer in general.viewer_objects:
+                if general.viewer_objects[viewer].join_message_check is False:
+                    pass
+                else:
+                    sql_commands.welcome_viewers(
+                        s=general.oursocket,
+                        general=general,
+                        getviewers=general.get_viewers_func[0] + general.get_viewers_func[1],
+                        currtime=int(time.time()))
+
         if general.total_hourstime > 300:
             general.game_name = current_game.game_name()
             viewerclass.create_all_viewerobjects(
@@ -227,12 +223,16 @@ def timefunctions():
                 general.get_viewers_func[1])
             sql_commands.check_mods(general.get_viewers_func[1])
             sql_commands.update_bots()
+            sql_commands.save_chat(general=general)
+            sql_commands.update_invited_by(general)
+            sql_commands.write_welcome_viewers(general)
             print(formatted_time(), "Data finished saving")
 
-            for viewer in general.get_viewers_func[0] + general.get_viewers_func[1]:
-                if viewer in general.viewer_objects:
-                    general.viewer_objects[viewer].time_before_last_seen = general.viewer_objects[viewer].last_seen
-                    general.viewer_objects[viewer].last_seen = int(time.time())
+            for viewer in general.viewer_objects:
+                if general.viewer_objects[viewer].old_uid == 0:
+                    pass
+                else:
+                    sql_commands.combine_db_data(general, username=viewer)
 
             general.total_hourstime = 0
             # should be on a separate thread
@@ -264,10 +264,18 @@ def saveviewerchat():
                 username=user_and_message[0],
                 message=user_and_message[1],
                 general=general)
-            if game_name not in general.viewer_objects[user_and_message[0]].chat_line_dict:
-                general.viewer_objects[user_and_message[0]].chat_line_dict[game_name] = 1
-            else:
-                general.viewer_objects[user_and_message[0]].chat_line_dict[game_name] += 1
+
+            # general.inserting_viewer = True
+            viewerclass.add_one_viewerobject(general, user_and_message[0])
+            # cant have this here can cause rare dict iteration error Runtimeerror
+            if user_and_message[0] not in general.viewer_objects:
+                pass
+            else:  # bug is here (below)
+                if game_name not in general.viewer_objects[user_and_message[0]].chat_line_dict:
+                    general.viewer_objects[user_and_message[0]].chat_line_dict[game_name] = 1
+                else:
+                    general.viewer_objects[user_and_message[0]].chat_line_dict[game_name] += 1
+            # general.inserting_viewer = False
 
             botcommands.handle_commands(
                 s,
@@ -283,38 +291,8 @@ def saveviewerchat():
         # handle_files()
 
 
-def chatfunctions():
-    if general.get_viewers_func is False:
-        general.get_viewers_func = get_viewers()
-    while True:
-        # error_log()
-        general.chattime_end = time.time()
-        general.chattime_difference = general.chattime_end - general.chattime_start
-
-        if general.chattime_difference > 60:
-            sql_commands.check_if_user_exists(
-                get_viewers=(
-                    general.get_viewers_func[0] +
-                    general.get_viewers_func[1]))
-
-            # set this false before we start writing to database
-            # so messages are not lost/saved to placeholder
-
-            sql_commands.save_chat(general=general)
-            # once  writing for each key to the db is one, set the main dict to be equal to the placeholder
-            # and then reset our placeholder and the bool
-            general.chattime_start = general.chattime_end
-        else:
-            time.sleep(1)
-        # handle_files()
-
-
 def gamefunctions(message, s, username, ourtrivia):
     # error_log()
-
-    general.create_num()
-
-
     # print(319, ourtrivia.trivia_total_time)
     if len(ourtrivia.question_list) == 0:
         ourtrivia.get_question_list(ourtrivia)
@@ -322,7 +300,7 @@ def gamefunctions(message, s, username, ourtrivia):
         ourtrivia.get_question(ourtrivia=ourtrivia)
     trivia_game.trivia_question(message=message, s=s, ourtrivia=ourtrivia)
 
-    if ourtrivia.counter == 1:
+    if ourtrivia.was_question_asked is True:
         ourtrivia.trivia_time_end = time.time()
         ourtrivia.trivia_total_time = ourtrivia.trivia_time_end - ourtrivia.trivia_time_start
         trivia_game.trivia_answer(
@@ -404,8 +382,6 @@ def handle_response(s, response, full_regex):
             sql_commands.update_last_seen(username)
             if "JOIN" in response:
                 print(username, 'has joined')
-                """if username not in general.recently_joined:
-                    general.recently_joined.append(username)"""
                 viewerclass.add_one_viewerobject(
                     general=general, viewer=username)
             return None
@@ -439,7 +415,6 @@ def main():  # printing @badges line once, and sometimes skipping messages is a 
         # error_log()
         general.oursocket = connect_socket()
         general.create_num()
-        functionschatthread()
         saveviewerchatthread()
 
         functionstimethread()

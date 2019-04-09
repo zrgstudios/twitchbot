@@ -1,6 +1,7 @@
 import sqlite3
 import datetime
 import requests
+from copy import deepcopy
 
 from twitchbot import (encryption_key,
                        current_game,
@@ -79,18 +80,21 @@ def create_viewer_tables():
 
 
 def insert_user(User_Name, User_Type, Join_Date, game):
-    conn = sqlite3.connect(sql_file())
-    c = conn.cursor()
-    if type(User_Name) is list or User_Name is None:
-        pass
-    elif str(User_Name).isdigit():
-        if User_Name[0] == 0:
+    try:
+        conn = sqlite3.connect(sql_file())
+        c = conn.cursor()
+        if type(User_Name) is list or User_Name is None:
             pass
-    else:
-        c.execute('INSERT INTO ViewerData(UID, "User_Name", User_Type, Join_Date, Points, Join_Game) Values'
-                  '(?, LOWER(?), ?, ?, ?, ?)', (UID_generator(), str(User_Name), User_Type, Join_Date, 0, game))
-    conn.commit()
-    conn.close()
+        elif str(User_Name).isdigit():
+            if User_Name[0] == 0:
+                pass
+        else:
+            c.execute('INSERT INTO ViewerData(UID, "User_Name", User_Type, Join_Date, Points, Join_Game) Values'
+                      '(?, LOWER(?), ?, ?, ?, ?)', (UID_generator(), str(User_Name), User_Type, Join_Date, 0, game))
+        conn.commit()
+        conn.close()
+    except sqlite3.IntegrityError:
+        pass  # this is not getting a new uid fast enough(?), dont know where its hung up
 
 
 def get_table_columns():  # startup
@@ -109,6 +113,9 @@ def get_table_columns():  # startup
         c.execute("ALTER TABLE ViewerData ADD COLUMN Invited_By STRING")
     if "Join_Game" not in columns:
         c.execute("ALTER TABLE ViewerData ADD COLUMN Join_Game STRING")
+    if "Updating_Name_Point_Deduction" not in columns:
+        c.execute("ALTER TABLE ViewerData ADD COLUMN Updating_Name_Point_Deduction INTEGER")
+
     conn.commit()
     conn.close()
 
@@ -203,15 +210,16 @@ def UID_generator():  # this needs to read the last uid from the database and us
 def update_all_users_hours(general, todaydate):
     conn1 = sqlite3.connect(hours_file())
     c1 = conn1.cursor()
-    for viewer in general.viewer_objects:
+    copy_of_viewerobjects = deepcopy(general.viewer_objects)
+    for viewer in copy_of_viewerobjects:
         uid = general.viewer_objects[viewer].uid
         if uid is None or uid == 'None':
             pass
         else:
-            for game in general.viewer_objects[viewer].seconds:
+            for game in copy_of_viewerobjects[viewer].seconds:
 
                 # game = 0 day = 1 seconds = 2
-                seconds = general.viewer_objects[viewer].seconds.get(game)
+                seconds = copy_of_viewerobjects[viewer].seconds.get(game)
 
                 sql_gameuid = c1.execute("SELECT UID FROM Hours WHERE UID=? AND Game=? AND Day=?", (uid,
                                                                                                     game,
@@ -232,9 +240,23 @@ def update_all_users_hours(general, todaydate):
                                                                                                seconds, uid,
                                                                                                game,
                                                                                                todaydate))
-                    general.viewer_objects[viewer].seconds[game] = 0
+                    for game_original in general.viewer_objects[viewer].seconds:
+                        if game == game_original:
+                            general.viewer_objects[viewer].seconds[game] = 0
     conn1.commit()
     conn1.close()
+
+
+def update_invited_by(general):
+    conn = sqlite3.connect(sql_file())
+    c = conn.cursor()
+    copy_of_viewerobjects = deepcopy(general.viewer_objects)
+    for viewer in copy_of_viewerobjects:
+        if copy_of_viewerobjects[viewer].invited_by is not None:
+            c.execute('UPDATE ViewerData SET Invited_By=? WHERE User_Name=?', (general.viewer_objects[viewer].
+                                                                               invited_by, viewer))
+    conn.commit()
+    conn.close()
 
 
 # this cant write to DB because it's already open from where this function is called from
@@ -244,52 +266,57 @@ def update_user_chat_lines(date, general):  # this should grab an item from view
     c1 = conn1.cursor()
     # can use this same concept for trivia questions answered correctly
 
-    for viewer in general.viewer_objects:
-        uid = general.viewer_objects[viewer].uid
-        for game in general.viewer_objects[viewer].chat_line_dict:
+    copy_of_viewerobjects = deepcopy(general.viewer_objects)
+
+    for viewer in copy_of_viewerobjects:
+        uid = copy_of_viewerobjects[viewer].uid
+        for game in copy_of_viewerobjects[viewer].chat_line_dict:
 
             sql_old_chatlines = c1.execute("SELECT Chat FROM Hours WHERE UID=? AND Game=? AND Day=?",
                                            (uid, game, date))
             string_old_chatlines = sql_old_chatlines.fetchone()
-            if string_old_chatlines[0] is None or string_old_chatlines[0] == 'None':
+            if string_old_chatlines is None or string_old_chatlines[0] == 'None':
                 string_old_chatlines = 0
             else:
                 string_old_chatlines = string_old_chatlines[0]
 
             c1.execute("UPDATE Hours SET Chat=?+? WHERE UID=? AND Game=? AND Day=?",
                        (string_old_chatlines,
-                        general.viewer_objects[viewer].chat_line_dict.get(game),
+                        copy_of_viewerobjects[viewer].chat_line_dict.get(game),
                         uid,
                         game,
                         date))
             general.viewer_objects[viewer].chat_line_dict[game] = 0
     conn1.commit()
     conn1.close()
-    # print(e, "line 286")  # this doesnt need to be printed anymore, user just hadnt been added to DB yet
 
 
 def update_user_points(general):
-    try:
-        conn = sqlite3.connect(sql_file())
-        c = conn.cursor()
+    #try:
+    conn = sqlite3.connect(sql_file())
+    c = conn.cursor()
 
-        c.execute("UPDATE ViewerData SET Points='0' WHERE Points IS NULL")
-        for viewer in general.viewer_objects:
-            for game in general.viewer_objects[viewer].seconds:
-                # game = 0, day = 1, time = 2, username = 3
-                if game == "Offline":
-                    points = 0.0001 * general.viewer_objects[viewer].seconds.get(game)
-                else:
-                    points = 0.00016 * general.viewer_objects[viewer].seconds.get(game)
-                sql_oldpoints = c.execute("SELECT Points FROM ViewerData WHERE User_Name=?", (viewer,))
-                string_oldpoints = sql_oldpoints.fetchone()[0]
-                total_points = float(string_oldpoints) + float(points)
-                c.execute("UPDATE ViewerData SET Points=? WHERE User_Name=?",
-                          (str(total_points), viewer))
-        conn.commit()
-        conn.close()
-    except (TypeError, sqlite3.OperationalError) as e:
-        pass
+    c.execute("UPDATE ViewerData SET Points='0' WHERE Points IS NULL")
+
+    copy_of_viewerobjects = deepcopy(general.viewer_objects)
+
+    for viewer in copy_of_viewerobjects:
+        for game in copy_of_viewerobjects[viewer].seconds:
+            # game = 0, day = 1, time = 2, username = 3
+            if game == "Offline":
+                points = 0.001 * general.viewer_objects[viewer].seconds.get(game)
+            else:
+                points = 0.016 * general.viewer_objects[viewer].seconds.get(game)
+            sql_oldpoints = c.execute("SELECT Points FROM ViewerData WHERE User_Name=?", (viewer,))
+            string_oldpoints = sql_oldpoints.fetchone()[0]
+            total_points = float(string_oldpoints) + float(points) + general.viewer_objects[viewer].points
+            c.execute("UPDATE ViewerData SET Points=? WHERE User_Name=?",
+                      (total_points, viewer))
+            general.viewer_objects[viewer].points = 0
+    conn.commit()
+    conn.close()
+    #except (TypeError, sqlite3.OperationalError) as e:
+      #  pass
 
 
 def update_bots():  # time based
@@ -354,10 +381,12 @@ def save_chat(general):  # chat based
     c = conn.cursor()
     # message=sublist[2], game=sublist[3], formatted_time=sublist[1], date=sublist[0]
 
-    for viewer in general.viewer_objects:
-        if general.viewer_objects[viewer].chat is not None:
+    copy_of_viewerobjects = deepcopy(general.viewer_objects)
+
+    for viewer in copy_of_viewerobjects:
+        if copy_of_viewerobjects[viewer].chat is not None:
             uid = get_uid_from_username(viewer)
-            for chat_item in general.viewer_objects[viewer].chat:
+            for chat_item in copy_of_viewerobjects[viewer].chat:
                 sql_currnum = c.execute('SELECT MAX(MessageNum) from viewer_chat')
                 string_currnum = sql_currnum.fetchone()[0]
                 if string_currnum is None:
@@ -371,12 +400,16 @@ def save_chat(general):  # chat based
                            uid,
                            chat_item[2],
                            chat_item[3]))
-                general.viewer_objects[viewer].chat.remove(chat_item)
+
+                copy_of_viewerobjects[viewer].chat.remove(chat_item)
+                if viewer in general.viewer_objects:  # probably a bug here
+                    general.viewer_objects[viewer].chat.remove(chat_item)
+
     conn.commit()
     conn.close()
 
 
-def welcome_viewers(s, general, getviewers):  # welcomes all new viewers with a joinmessage # time based
+def welcome_viewers(s, general, getviewers, currtime):  # welcomes all new viewers with a joinmessage
     conn = sqlite3.connect(sql_file())
     c = conn.cursor()
     for viewer in getviewers:
@@ -386,16 +419,37 @@ def welcome_viewers(s, general, getviewers):  # welcomes all new viewers with a 
             sql_check_for_joinmessage = c.execute("SELECT Join_Message FROM ViewerData WHERE User_Name=?",
                                                   (viewer,))
             str_check_for_joinmessage = sql_check_for_joinmessage.fetchone()
-            if str_check_for_joinmessage is not None:
+            if str_check_for_joinmessage[0] is None or str_check_for_joinmessage[0] == 'None':
+                general.viewer_objects[viewer].join_message_check = False
 
-                if str(str_check_for_joinmessage[0]).strip() == "None":
-                    general.viewer_objects[viewer].join_message_check = False
-                else:
-                    if abs(general.viewer_objects[viewer].last_seen -
-                       general.viewer_objects[viewer].time_before_last_seen) > 2400:
-                            twitchchat.chat(s, str(str_check_for_joinmessage[0]))
+            elif general.viewer_objects[viewer].last_seen - \
+                    general.viewer_objects[viewer].time_before_last_seen > 2400 or \
+                    general.viewer_objects[viewer].last_seen == 0:
+
+                        twitchchat.chat(s, str(str_check_for_joinmessage[0]))
+                        general.viewer_objects[viewer].last_seen = currtime
+                        general.viewer_objects[viewer].time_before_last_seen = \
+                            general.viewer_objects[viewer].last_seen
             else:
                 general.viewer_objects[viewer].join_message_check = False
+    conn.close()
+
+
+def write_welcome_viewers(general):
+    conn = sqlite3.connect(sql_file())
+    c = conn.cursor()
+    for viewer in general.viewer_objects:
+        if general.viewer_objects[viewer].join_message_check is False or \
+                general.viewer_objects[viewer].join_message_check is None:
+            pass
+        elif general.viewer_objects[viewer].join_message_check == 'remove_joinmessage':
+            c.execute("UPDATE ViewerData Set Join_Message = Null WHERE User_Name = ?", (viewer,))
+
+        else:
+            c.execute("UPDATE ViewerData Set Join_Message = ? WHERE User_Name = ?", (general.viewer_objects[viewer]
+                                                                                     .join_message_check, viewer))
+            general.viewer_objects[viewer].join_message_check = None
+    conn.commit()
     conn.close()
 
 
@@ -567,8 +621,7 @@ def check_mods(get_viewers):  # this needs a way to un-mod a mod as well, not cu
             sql_find_user = c.execute('SELECT User_Name FROM ViewerData WHERE User_Name = ?', (i,))
             user = sql_find_user.fetchall()
             if not user:
-                check_if_user_exists(get_viewers)
-                    #print('Could not add user, database locked')
+                pass
             else:
                 if i == encryption_key.decrypted_chan.lower():
                     c.execute("UPDATE ViewerData SET User_Type = 'Streamer' WHERE User_Name = ?", (i,))
@@ -594,3 +647,53 @@ def get_uid_from_username(username):
         return string_uid
     except TypeError as e:
         return False
+
+
+def combine_db_data(general, username):
+    conn = sqlite3.connect(sql_file())
+    c = conn.cursor()
+    conn2 = sqlite3.connect(hours_file())
+    c2 = conn2.cursor()
+
+    old_uid = general.viewer_objects[username].old_uid
+
+    sql_new_uid = c.execute('SELECT UID FROM ViewerData WHERE User_Name=?', (username,))
+    str_new_uid = sql_new_uid.fetchone()[0]
+
+    sql_joindate = c.execute('SELECT Join_Date FROM ViewerData WHERE UID=?', (old_uid,))
+    str_joindate = sql_joindate.fetchone()
+    if str_joindate is not None:
+        c.execute('UPDATE ViewerData SET Join_Date=? WHERE UID=?', (str_joindate[0], str_new_uid))
+
+    sql_points = c.execute('SELECT Points FROM ViewerData WHERE UID=?', (old_uid,))
+    str_points = sql_points.fetchone()
+    c.execute('UPDATE ViewerData SET Points=Points+? WHERE UID=?', (str_points[0], str_new_uid))
+
+    sql_invited_by = c.execute('SELECT Invited_By FROM ViewerData WHERE UID=?', (old_uid,))
+    str_invited_by = sql_invited_by.fetchone()
+    if str_invited_by is not None:
+        c.execute('UPDATE ViewerData SET Invited_By=? WHERE UID=?', (str_invited_by[0], str_new_uid))
+
+    sql_join_game = c.execute('SELECT Join_Game FROM ViewerData WHERE UID=?', (old_uid,))
+    str_join_game = sql_join_game.fetchone()
+    if str_join_game is not None:
+        c.execute('UPDATE ViewerData SET Join_Game=? WHERE UID=?', (str_join_game[0], str_new_uid))
+
+    sql_point_check = c.execute('SELECT Updating_Name_Point_Deduction FROM ViewerData WHERE UID?', (old_uid,))
+    str_join_game = sql_point_check.fetchone()
+    if str_join_game is None:
+        c.execute('UPDATE ViewerData SET Updating_Name_Point_Deduction=200 WHERE User_Name=?', (username,))
+    else:
+        c.execute('UPDATE ViewerData SET Updating_Name_Point_Deduction=Updating_Name_Point_Deduction*2 '
+                  'WHERE User_Name=?', (username,))
+
+    c.execute('DELETE FROM ViewerData WHERE UID=?', (old_uid,))
+
+    c2.execute('UPDATE Hours SET UID=? WHERE UID=?', (str_new_uid, old_uid))
+
+    general.viewer_objects[username].old_uid = 0
+
+    conn2.commit()
+    conn2.close()
+    conn.commit()
+    conn.close()
