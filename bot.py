@@ -25,7 +25,8 @@ from twitchbot import (
     sql_commands,
     trivia_game,
     verify_streamer,
-    viewerclass,)
+    viewerclass,
+    get_commands,)
 
 
 fkey = encryption_key.fkey
@@ -53,6 +54,15 @@ class General:
         self.trivia = trivia_game.TriviaQuestion()
 
         self.randnum = -1
+
+        self.str_command_dict = {}
+        self.list_command_dict = {}
+
+        self.user_levels = {'Larvae': 120, 'Drone': 240, 'Zergling': 480, 'Baneling': 960, 'Overlord': 1920,
+                            'Roach': 3840, 'Ravager': 7680, 'Overseer': 11520, 'Mutalisk': 14400,
+                            'Corrupter': 18000, 'Hydralisk': 22500, 'Swarm Host': 28125, 'Locust': 35156,
+                            'Infestor': 43945, 'Lurker': 50537, 'Viper': 58117, 'Ultralisk': 66835, 'Broodlord': 75523,
+                            'Dark Archon': 123139, 'Cerebrate': 200000, 'The Overmind': 500000, 'Kerrigan': 700000}
 
     def create_num(self):
         ourval = random.randrange(0, 100)
@@ -100,7 +110,7 @@ def connect_socket():
         s = socket.socket()
         s.connect((encryption_key.cfg_host, int(encryption_key.cfg_port)))
         s.send(
-            'raw CAP REQ :twitch.tv/membership twitch.tv/tags twitch.tv/commands\r\n'.encode('utf-8'))
+            f'CAP REQ :twitch.tv/membership twitch.tv/tags twitch.tv/commands\r\n'.encode('utf-8'))
         s.send(
             "PASS {}\r\n".format(
                 encryption_key.decrypted_pass).encode("utf-8"))
@@ -139,6 +149,7 @@ def get_viewers():
         return viewers_and_mods
     except TypeError:
         print('TYPERROR')
+        return general.get_viewers_func  # shitty workaround, dont know if this will cause it to get stuck
     # this had multiple try/excepts (typeerror and valueerror, might crash now)
 
 
@@ -202,6 +213,7 @@ def timefunctions():  # make a counter here so not multiple saves occur
                 if general.viewer_objects[viewer].join_message_check is False:
                     pass
                 else:
+                    pass
                     sql_commands.welcome_viewers(
                         s=general.oursocket,
                         general=general,
@@ -221,7 +233,7 @@ def timefunctions():  # make a counter here so not multiple saves occur
             sql_commands.check_users_joindate(
                 general.get_viewers_func[0] +
                 general.get_viewers_func[1])
-            sql_commands.check_mods(general.get_viewers_func[1])
+            sql_commands.check_mods(general)  # this was before just mods
             sql_commands.update_bots()
             sql_commands.save_chat(general=general)
             sql_commands.update_invited_by(general)
@@ -265,17 +277,12 @@ def saveviewerchat():
                 message=user_and_message[1],
                 general=general)
 
-            # general.inserting_viewer = True
             viewerclass.add_one_viewerobject(general, user_and_message[0])
-            # cant have this here can cause rare dict iteration error Runtimeerror
-            if user_and_message[0] not in general.viewer_objects:
-                pass
-            else:  # bug is here (below)
-                if game_name not in general.viewer_objects[user_and_message[0]].chat_line_dict:
-                    general.viewer_objects[user_and_message[0]].chat_line_dict[game_name] = 1
-                else:
-                    general.viewer_objects[user_and_message[0]].chat_line_dict[game_name] += 1
-            # general.inserting_viewer = False
+            general.viewer_objects[user_and_message[0]].points += .2
+            if game_name not in general.viewer_objects[user_and_message[0]].chat_line_dict:
+                general.viewer_objects[user_and_message[0]].chat_line_dict[game_name] = 1
+            else:
+                general.viewer_objects[user_and_message[0]].chat_line_dict[game_name] += 1
 
             botcommands.handle_commands(
                 s,
@@ -287,11 +294,11 @@ def saveviewerchat():
                 message=user_and_message[1],
                 s=s,
                 username=user_and_message[0],
-                ourtrivia=general.trivia)
+                ourtrivia=general.trivia, general=general)
         # handle_files()
 
 
-def gamefunctions(message, s, username, ourtrivia):
+def gamefunctions(message, s, username, ourtrivia, general=general):
     # error_log()
     # print(319, ourtrivia.trivia_total_time)
     if len(ourtrivia.question_list) == 0:
@@ -302,14 +309,27 @@ def gamefunctions(message, s, username, ourtrivia):
 
     if ourtrivia.was_question_asked is True:
         ourtrivia.trivia_time_end = time.time()
+        ourtrivia.trivia_bool = True
         ourtrivia.trivia_total_time = ourtrivia.trivia_time_end - ourtrivia.trivia_time_start
+        print(ourtrivia.trivia_total_time)
         trivia_game.trivia_answer(
             message=message,
             s=s,
             ourtrivia=ourtrivia,
             trivia_total_time=ourtrivia.trivia_total_time,
-            username=username)
+            username=username,
+            general=general)
     # handle_files()
+
+
+def check_files():
+    if not pathlib.Path('MyFiles/bot_commands.txt'):
+        with open('MyFiles/bot_commands.txt') as f:
+            f.write("""-hello [hello username]\n
+                    -eightball random [No; Yes; Leave me alone; I think we already know the answer to THAT; 
+                    I'm not sure; My sources point to yes; Could be yes, could be no, nobody knows!; Maybe; 
+                    Are you kidding me?; You may rely on it; Outlook not so good; Don't count on it; Most likely; 
+                    Without a doubt; As I see it; yes]""")
 
 
 def first_time():
@@ -347,6 +367,7 @@ def first_time():
 def startup():
     sql_commands.get_table_columns()
     sql_commands.check_table_names()
+    get_commands.get_commands(general)
 
 
 def handle_response(s, response, full_regex):
@@ -377,11 +398,9 @@ def handle_response(s, response, full_regex):
             return [username, whisper_message]
 
         elif ".tmi.twitch.tv PART" in response or ".tmi.twitch.tv JOIN" in response:
-            print(430, response)
             username = re.search(r"(?<=!)(.*)(?=@)", response).group(0)
             sql_commands.update_last_seen(username)
             if "JOIN" in response:
-                print(username, 'has joined')
                 viewerclass.add_one_viewerobject(
                     general=general, viewer=username)
             return None
@@ -394,11 +413,12 @@ def handle_response(s, response, full_regex):
                 print("(" + formatted_time() + ")" + username + ": " + message)
                 return [username, message]
     except UnicodeEncodeError:
-        pass
+        print('Unicode Error')
 
 
 def main():  # printing @badges line once, and sometimes skipping messages is a lot sent quickly
     general.game_name = current_game.game_name()
+    general.todaydate = datetime.datetime.today().date()
     if not os.path.exists('MyFiles/cfg.txt'):
         encryption_key.GetUserInput()
         first_time()

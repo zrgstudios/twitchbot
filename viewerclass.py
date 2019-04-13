@@ -4,7 +4,7 @@ from twitchbot import sql_commands
 class Viewer:
     def __init__(self):
         self.uid = ''
-        self.rankpoints = 0
+        self.level = 0
 
         self.join_message_check = None  # implemented
         # ^ if None then not checked yet, if False then no message
@@ -21,11 +21,11 @@ class Viewer:
         self.old_uid = 0
 
 
-user_ranks = {'Larvae': 120, 'Drone': 240, 'Zergling': 480, 'Baneling': 960, 'Overlord': 1920, 'Roach': 3840,
-              'Ravager': 7680, 'Overseer': 11520, 'Mutalisk': 14400, 'Corrupter': 18000, 'Hydralisk': 22500,
-              'Swarm Host': 28125, 'Locust': 35156, 'Infestor': 43945, 'Lurker': 50537, 'Viper': 58117,
-              'Ultralisk': 66835, 'Broodlord': 75523, 'Dark Archon': 123139, 'Abathur': 200000, 'Alexi Stukov': 300000,
-              'Cerebrate': 400000, 'The Overmind': 500000, 'Kerrigan': 700000}
+user_levels = {'Larvae': 120, 'Drone': 240, 'Zergling': 480, 'Baneling': 960, 'Overlord': 1920, 'Roach': 3840,
+               'Ravager': 7680, 'Overseer': 11520, 'Mutalisk': 14400, 'Corrupter': 18000, 'Hydralisk': 22500,
+               'Swarm Host': 28125, 'Locust': 35156, 'Infestor': 43945, 'Lurker': 50537, 'Viper': 58117,
+               'Ultralisk': 66835, 'Broodlord': 75523, 'Dark Archon': 123139, 'Abathur': 200000, 'Alexi Stukov': 300000,
+               'Cerebrate': 400000, 'The Overmind': 500000, 'Kerrigan': 700000}
 
 
 def create_all_viewerobjects(getviewers, general):
@@ -52,31 +52,34 @@ def add_one_viewerobject(general, viewer):  # saving viewer objects to general c
             pass
 
 
-def time_rank_movement(viewer):  # this part should be every couple minutes while messages should be instant
-    viewer.rankpoints += (viewer.chat * .15)  # each chatline = .15 of a point
-    viewer.rankpoints += (viewer.seconds * .01)  # 60 seconds in a minute, 10 minutes = 600 * .01 = 60 points
+def time_level_movement(viewer, general):
+    general.viewer_objects[viewer].level += (viewer.chat * .15)  # each chatline = .15 of a point
+    general.viewer_objects[viewer].level += (viewer.seconds * .01)
+    # 60 seconds in a minute, 10 minutes = 600 * .01 = 60 points
 
 
-def chat_rank_movement(viewer, message, starting_val):  # this entire thing should be moved to botcommands
+def chat_level_movement(viewer, message, starting_val, general):  # this entire thing should be moved to botcommands
     if message.startswith(starting_val + "honor"):
         # this should give points both to honored person and person who honored them
-        viewer.rankpoints += 100
+        general.viewer_objects[viewer].level += 100
     elif message.startswith(starting_val + "dishonor"):
-        viewer.rankpoints -= 150
+        general.viewer_objects[viewer].level -= 150
     else:
-        cursewords = ['shit']
+        cursewords = ['shit', 'fuck', 'gay', 'ghey', 'cunt']
         goodwords = []
+        commands = ["-help", "-discord"]
         words_list = message.split(" ")
         for i in words_list:
             if i in cursewords:
-                viewer.rankpoints -= 1
+                general.viewer_objects[viewer].level -= 1
             elif i in goodwords:
-                viewer.rankpoints += .5
+                general.viewer_objects[viewer].level += .5
+            elif i in commands:
+                general.viewer_objects[viewer].level += .5
 
 
-def invite_rank_movement(general, inviter_viewer, invited_viewer):
-    general.viewer_objects[inviter_viewer].rankpoints += 10
-    general.viewer_objects[invited_viewer].rankpoints += 5
+def invite_level_movement(general, inviter_viewer):
+    general.viewer_objects[inviter_viewer].level += 10
 
 
 # for sublist in uid, chatcounter += 1, then write that number to db

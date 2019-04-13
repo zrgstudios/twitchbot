@@ -27,22 +27,7 @@ starting_val = '-'
 
 def handle_commands(s, username, message, general):
 
-    if message.startswith(starting_val + 'help'):
-        twitchchat.chat(s, python_commands())
-
-    elif message.startswith(starting_val + "hello"):
-        twitchchat.chat(s, hello() + ' ' + username)
-
-    elif message.startswith(starting_val + "eightball"):
-        twitchchat.chat(s, random.choice(eight_ball()))
-
-    elif message.startswith(starting_val + "bm"):
-        twitchchat.chat(s, bm(username))
-
-    elif message.startswith(starting_val + 'feelgood'):
-        twitchchat.chat(s, feel_good(username))
-
-    elif message.startswith(starting_val + 'joinmessage'):  # if joinmessage is empty pass
+    if message.startswith(starting_val + 'joinmessage'):  # if joinmessage is empty pass
         try:
             conn = sqlite3.connect(sql_file())
             c = conn.cursor()
@@ -207,9 +192,9 @@ def handle_commands(s, username, message, general):
     elif message.startswith(starting_val + "compare"):
         #try:
         keyword = ((message.split(' ')[1]).strip()).capitalize()
-        if keyword == "Points" or keyword == "Hours" or keyword == "Chatlines":
+        if keyword == "Points" or keyword == "Hours" or keyword == "Chatlines" or keyword == "Level":
             sec_username = ((message.split(' ')[2]).strip()).lower()
-            if "Points" in message or "points" in message:
+            if keyword == "Points":
                 conn = sqlite3.connect(sql_file())
                 c = conn.cursor()
 
@@ -218,9 +203,29 @@ def handle_commands(s, username, message, general):
                 sql_points2 = c.execute("SELECT Points FROM ViewerData Where User_Name=?", (sec_username,))
                 string_points2 = sql_points2.fetchone()
 
-                difference = (abs(int(string_points1[0])) - int(string_points2[0]))
+                if sec_username not in general.viewer_objects:
+                    difference = (abs(int(string_points1[0]) + general.viewer_objects[username].points - int
+                                  (string_points2[0])))
+                else:
+                    difference = (abs(int(string_points1[0]) + general.viewer_objects[username].points - int
+                                  (string_points2[0]) + general.viewer_objects[sec_username].points))
                 twitchchat.chat(s, username + " has " + str(round(string_points1[0], 2)) + ", " + sec_username + " has "
                                 + str(round(string_points2[0], 2)) + ", that's a difference of " + str(difference))
+                conn.close()
+
+            elif keyword == "Level":
+                conn = sqlite3.connect(sql_file())
+                c = conn.cursor()
+                sql_level1 = c.execute("SELECT Level FROM ViewerData Where User_Name=?", (username,))
+                string_level1 = sql_level1.fetchone()
+                sql_level2 = c.execute("SELECT Level FROM ViewerData Where User_Name=?", (sec_username,))
+                string_level2 = sql_level2.fetchone()
+
+                difference = (abs(int(string_level1[0]) + general.viewer_objects[username].points - int
+                              (string_level2[0]) + general.viewer_objects[sec_username].points))
+                twitchchat.chat(s, username + " has " + str(round(string_level1[0], 2)) + ", " + sec_username + " has "
+                                + str(round(string_level2[0], 2)) + ", that's a difference of " + str(int(difference)))
+                conn.close()
 
             else:
                 conn1 = sqlite3.connect(hours_file())
@@ -236,17 +241,20 @@ def handle_commands(s, username, message, general):
                 if string_uid2 is None:
                     pass
                 else:
-                    if keyword.capitalize() == 'Chatlines':
+                    if keyword == 'Chatlines':
                         keyword = 'Chat'
                     string_uid2 = string_uid2[0]
-
                     sql_keyword_grab1 = c1.execute("SELECT %s FROM Hours WHERE UID=? AND Game NOT IN ('Offline')"
                                                    % keyword,
                                                    (string_uid1,))
                     string_keyword_grab1 = sql_keyword_grab1.fetchall()
                     keyword_sum1 = []
                     for i in string_keyword_grab1:
-                        keyword_sum1.append(i[0])
+                        if i[0] is None:
+                            num = 0
+                        else:
+                            num = i[0]
+                        keyword_sum1.append(num)
                     sum1_total = sum(keyword_sum1)
 
                     sql_keyword_grab2 = c1.execute("SELECT %s FROM Hours WHERE UID=? AND Game NOT IN ('Offline')"
@@ -255,7 +263,11 @@ def handle_commands(s, username, message, general):
                     string_keyword_grab2 = sql_keyword_grab2.fetchall()
                     keyword_sum2 = []
                     for i in string_keyword_grab2:
-                        keyword_sum2.append(i[0])
+                        if i[0] is None:
+                            num = 0
+                        else:
+                            num = i[0]
+                        keyword_sum2.append(num)
                     sum2_total = sum(keyword_sum2)
 
                     difference = (abs(int(sum1_total)) - int(sum2_total))
@@ -376,8 +388,7 @@ def handle_commands(s, username, message, general):
         or message.startswith(starting_val + 'honor') \
             or message.startswith(starting_val + 'dishonor'):
         try:
-            keyword = ((message.split()[1]).strip()).lower()
-            print(371, keyword)
+            sec_username = ((message.split()[1]).strip()).lower()
             conn = sqlite3.connect(sql_file())
             c = conn.cursor()
             if message.startswith(starting_val + "invite"):
@@ -391,11 +402,11 @@ def handle_commands(s, username, message, general):
                     all_names_list = []
                     for i in string_all_names:
                         all_names_list.append(i[0])
-                    if keyword not in all_names_list:
+                    if sec_username not in all_names_list:
                         twitchchat.chat(s, "It looks like you spelled the persons name wrong! Please try again " +
                                         username)
 
-                    elif keyword == username:
+                    elif sec_username == username:
                         twitchchat.chat(s, "Nice try " + username)
                         general.viewer_objects[username].points -= 10
                         twitchchat.chat(s, "/timeout " + username + " 10")
@@ -403,21 +414,20 @@ def handle_commands(s, username, message, general):
                     elif general.viewer_objects[username].invited_by is not None or string_check[0] is not None:
                         twitchchat.chat(s, 'You\'ve already been invited by someone')
                     else:
-                        general.viewer_objects[username].invited_by = keyword
-                        print(398, general.viewer_objects[username].invited_by)
+                        general.viewer_objects[username].invited_by = sec_username
+                        # will throw error if username entered wrong
                         general.viewer_objects[username].points += 50
-                        general.viewer_objects[keyword].points += 100
-                        viewerclass.invite_rank_movement(general=general,
-                                                         inviter_viewer=username,
-                                                         invited_viewer=keyword)
-                        twitchchat.chat(s, "Points added to you " + username + " and " + keyword)
+                        general.viewer_objects[sec_username].points += 100
+                        viewerclass.invite_level_movement(general=general,
+                                                          inviter_viewer=username)
+                        twitchchat.chat(s, "Points added to you " + username + " and " + sec_username)
 
             elif message.startswith(starting_val + 'honor'):  # honor and dishonor don't work yet
-                keyword.rankpoints += 100
-                username.rankpoints += 25
+                general.viewer_objects[sec_username].level += 100
+                general.viewer_objects[username].level += 25
             elif message.startswith(starting_val + 'dishonor'):
-                keyword.rankpoints -= 100
-                username.rankpoints += 25
+                general.viewer_objects[sec_username].level -= 100
+                general.viewer_objects[username].level += 25
             conn.commit()
             conn.close()
         except IndexError:
@@ -447,8 +457,9 @@ def handle_commands(s, username, message, general):
             twitchchat.chat(s, 'You have to include a number ' + username)
 
     elif message.startswith(starting_val + 'update_id'):
-        keyword = ((message.split()[1]).strip())
         try:
+            keyword = ((message.split()[1]).strip())
+
             conn = sqlite3.connect(sql_file())
             c = conn.cursor()
             sql_uid_check = c.execute('SELECT UID FROM ViewerData WHERE UID=?', (keyword,))
@@ -456,15 +467,21 @@ def handle_commands(s, username, message, general):
             if str_uid_check is None:
                 twitchchat.whisper(s, '.w ' + username + ' Sorry it looks like you typed in your UID incorrectly')
             else:
-                twitchchat.whisper(s, '.w ' + username + ' Are you sure you want to do this? Some of your current data'
-                                                        'Such as your join date, invited by, and join game will be '
-                                                        'overwritten. Do -confirmed_transfer {your id here} '
-                                                        '(no brackets) if you\'re sure. Each time you do this is costs'
-                                                        ' double the last time starting at 200 points.')
+                twitchchat.whisper(s, '.w ' + username + ' This will combine your old UID (which you enter) with '
+                                                         'your new UID. Are you sure you want to do this? Some of your '
+                                                         'current data'
+                                                         'Such as your join date, invited by, and join game will be '
+                                                         'overwritten. Do -confirmed_transfer {your id here} '
+                                                         '(no brackets) if you\'re sure. Each time you do this is costs'
+                                                         ' double the last time starting at 200 points after the '
+                                                         'first time, which will be free.')
         except sqlite3.DatabaseError:
-            twitchchat.whisper(s, '.w ' + username + 'Sorry it looks like you typed in your UID incorrectly')
+            twitchchat.whisper(s, '.w ' + username + ' Sorry it looks like you typed in your UID incorrectly')
+        except IndexError:
+            twitchchat.whisper(s, '.w ' + username + ' You need to enter your UID as well so it will look like '
+                                                     '-update_id {UID} (no brackets)')
 
-    elif message.startswith(starting_val + '-confirmed_transfer'):
+    elif message.startswith(starting_val + 'confirmed_transfer'):
         conn = sqlite3.connect(sql_file())
         c = conn.cursor()
 
@@ -474,98 +491,71 @@ def handle_commands(s, username, message, general):
             old_str_points = old_sql_points.fetchone()
             new_sql_points = c.execute('SELECT Points FROM ViewerData WHERE User_Name=?', (username,))
             new_str_points = new_sql_points.fetchone()
+
+            # here is another example
+            if old_str_points[0] is None:
+                old_str_points = 0
+            else:
+                old_str_points = old_str_points[0]
+            if new_str_points[0] is None:
+                new_str_points = 0
+            else:
+                new_str_points = new_str_points[0]
+
             combined_points = old_str_points + new_str_points
+            # here is one example
             sql_point_check = c.execute('SELECT Updating_Name_Point_Deduction FROM ViewerData WHERE UID=?', (keyword,))
             str_point_check = sql_point_check.fetchone()
 
+            if str_point_check[0] is None:
+                str_point_check = 0
+            else:
+                str_point_check = str_point_check[0]
+
             if general.viewer_objects[username].old_uid != 0:
-                twitchchat.whisper(s, '.w ' + username + 'Sorry it looks like a transfer is already in process')
+                twitchchat.whisper(s, '.w ' + username + ' Sorry it looks like a transfer is already in process')
 
             if combined_points - str_point_check < 0:
-                twitchchat.whisper(s, '.w ' + username + 'Sorry you don\'t have enough combined points to do a '
+                twitchchat.whisper(s, '.w ' + username + ' Sorry you don\'t have enough combined points to do a '
                                                          'transfer')
             else:
-                general.old_uid = keyword
-                twitchchat.whisper(s, '.w ' + username + 'Data Transferring. Please be patient, it will take 10-20 '
+                general.viewer_objects[username].old_uid = keyword
+                twitchchat.whisper(s, '.w ' + username + ' Data Transferring. Please be patient, it will take 10-20 '
                                                          'minutes for your data to merge')
         except sqlite3.DatabaseError:
-            twitchchat.whisper(s, '.w ' + username + 'Sorry it looks like you typed in your UID incorrectly')
+            twitchchat.whisper(s, '.w ' + username + ' Sorry it looks like you typed in your UID incorrectly')
 
         conn.close()
 
+    elif message.startswith(starting_val + 'level'):
+        conn = sqlite3.connect(sql_file())
+        c = conn.cursor()
+        sql_level = c.execute('SELECT Level FROM ViewerData WHERE User_Name=?', (username,))
+        str_level = sql_level.fetchone()
+        level_iter = "Larvae"
+        combined_level = 0
+        for curr_level in general.user_levels:
+            combined_level = str_level[0] + general.viewer_objects[username].level
+            if combined_level > general.user_levels[curr_level]:
+                level_iter = curr_level
+        twitchchat.chat(s, '%s Your level is %s, and the amount of level points you have is %d' %
+                        (username, level_iter, combined_level))
+        conn.close()
 
-def hello():
-    return "hello"
+    for command in general.list_command_dict:
+        if message.startswith(command.strip()):
+            random_option = random.choice(general.list_command_dict[command])
+            replaced_version = random_option
+            if "username" in random_option:
+                replaced_version = random_option.replace("username", username)
+            twitchchat.chat(s, replaced_version)
 
-
-def eight_ball():
-    return ["No", "Yes", "Leave me alone", "I think we already know the answer to THAT",
-            "I'm not sure",
-            "My sources point to yes", "Could be yes, could be no, nobody knows!", "Maybe",
-            "Are you kidding me?", "You may rely on it", 'Outlook not so good', 'Don\'t count on it',
-            'Most likely', 'Without a doubt', 'As I see it, yes']
-
-
-def bm(username):
-    bm_list = ["Bronze 5 is too good for you " + username, "Hey " + username + " you're terrible at this",
-               "Your mother is a bronze 5 and your father smells of elderberries " + username,
-               "Crying yourself to sleep again tonight " + username + "? Good.",
-               "Is your father still out at the store? Don't worry, he'll come back soon " + username,
-               "If only someone cared " + username + "...",
-               username + " you must be a glutton for punishment eh?", username + " I bet you main yasuo",
-               username + " you degenerate weeb lover", "Hey " + username + ", you tried, now if only that mattered...",
-               'Trying for first in the Darwin awards ' + username + '? Go you!', "Nobody loves you " + username +
-               ", stop bothering me",
-               username + " you have two parts of brain, 'left' and 'right'. In the left side, there's nothing right. "
-               "In the right side, there's nothing left.",
-               "It's better to let someone think you are an idiot than to open your mouth and prove it " + username,
-               "Hey " + username + " you know how your parents always called you special? I just wanted to "
-                                   "make sure you knew that wasn't a compliment", "Heyya " + username
-               + ", just an FYI, you suck", "You know " + username +
-               ", your parents have always said you were a happy accident, and yet I've never seen them happy after "
-               "having you", "Hey " + username + " you’ll be good at something in life someday!"
-                             " Or maybe barely mediocre, don’t want to get your hopes up too high now...",
-               username + ", you light up my day like a lightbulb lights up a mine workers day, just barely "
-                          "and only because there’s no other options",
-               "I'm always happy at the beginning of the day, then I see you " + username +
-               " and get inexplicably depressed again", "For every second of every day, I try to forget you a little "
-                                                        "more " + username, "I just can't do this anymore, I'm sorry "
-               + username + ", I slept with your significant other, except I'm really not that sorry, "
-                            "and they told me I was better than you. It was great...", "So hows life treating you "
-                                                                                       "lately " + username +
-               "? Ah I'm sorry is that still a touchy subject for you?", username +
-               " you are a great human being with a lot of potential! "
-               "But only if great means terrible and potential means ugly"]
-    return random.choice(bm_list)
-
-
-def python_commands():
-    return 'https://giphertius.wordpress.com/2018/02/20/giphertius-python-commands/'
-
-
-def feel_good(username):
-    feel_good_list = ["You're more fun than a ball pit filled with candy " + username +
-                      " (And seriously, what could be more fun than that?)",
-                      "That thing you don't like about yourself is what makes you so interesting " + username,
-                      "If you were a box of crayons, you'd be the giant name-brand one with the built-in sharpener "
-                      + username,
-                      "The people you love are lucky to have you in their lives " + username,
-                      "Our community is better because you're in it " + username,
-                      username + ", you inspire me.",
-                      username + " you have a gift for making people comfortable.",
-                      username + " you are nothing less than special.",
-                      username + " you always make people smile.",
-                      username + " you have a heart of gold.",
-                      username + " I like the way you are.",
-                      username + " thanks for being there for me.",
-                      username + " you inspired me to become a better person.",
-                      username + " you smell good today.",
-                      username + " I am honored to get to know you.",
-                      "You are so talented " + username + "!",
-                      "I will be here to support you on your decisions " + username,
-                      "I believe in you " + username
-                      ]
-    return random.choice(feel_good_list)
+    for command in general.str_command_dict:
+        if message.startswith(command.strip()):
+            replaced_version = general.str_command_dict[command]
+            if "username" in replaced_version:
+                replaced_version = replaced_version.replace("username", username)
+            twitchchat.chat(s, replaced_version)
 
 
 def rewards(username):

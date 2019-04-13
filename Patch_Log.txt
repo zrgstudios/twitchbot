@@ -1,0 +1,35 @@
+1.10 - 2019-01-03
+- Increased trivia answer % correct ratio from 65 to 70
+- Fixed -joinmessage bug where doing -joinmessage without a message would break the bot
+- Fixed -compare chatlines username, would print 0 and difference of 0 for both users before this fix
+- Fixed rare bug where inserting a user would fail
+- Trivia is completely fixed, should not ever print the question followed immediately by the answer now
+
+1.11 - 2019-01-04
+- Fixed a problem with -compare not working
+
+1.20 - 2019-03-26
+- Revamped how data is saved, more stream-lined using classes
+- Resolved several bugs in the process
+- Join messages turned off while under repair
+
+1.21 - 2019-04-05
+- Simplified process for saving data in backend (reduced/removed several bugs)
+- Found and fixed bug which would cause a crash (dictionaries not saved correctly)
+- Fixed a bug where not all chatlines seemed to save to database
+- Updated -help so people can see all commands they can use
+- Welcome messages now work
+- Added -remove_joinmessage so users can remove their joinmessage at no cost
+- Removed bug that can create duplicates of users/ included small script that will delete any duplicates
+- Added -update_id so users can combine their data if they change names
+
+Known Bugs - Doing -trivia for first time will cause the question and answer to come out simultaneously if -trivia isn't done within 30 seconds of starting the bot
+
+1.22 - 
+- Added ability for streamers to make their own custom commands
+- Fixed a bug which kept chatlines from saving to database
+- Added an automatic unmod function (moderators who have been unmodded will be unmodded in the bot database as well (not instant))
+- Added a "level" function, this level moves based on how nice viewers are being, alpha stage (looooong alpha)
+- Users now are rewarded with 1 point per chatline
+- Fixed a bug where -compare chatlines {username} would break the bot
+- Added comparison between levels

@@ -13,12 +13,13 @@ class TriviaQuestion:
     def __init__(self):
         self.question = ''
         self.question_list = []
-        self.counter = 0
         self.trivia_total_time = 0
         self.trivia_time_start = time.time()
         self.trivia_time_end = 0
         self.answered = False  # switch to determine if we need to get a new question or not
         self.was_question_asked = False
+
+        trivia_bool = False
 
     def get_question(self, ourtrivia):
         self.question = trivia_qa(ourtrivia=ourtrivia)
@@ -38,7 +39,7 @@ def question_list_generator(ourtrivia):
 
 
 def trivia_qa(ourtrivia):
-    randline = random.choice(ourtrivia.question_list)  # error happening here because questionlist is empty
+    randline = random.choice(ourtrivia.question_list)
     question = re.search(r"(?<=)(.*)(?={Answer}.*)", randline)
     question = question.group(0)
     answer = re.search(r"(?<={Answer})(.*)", randline)
@@ -63,19 +64,23 @@ def trivia_question(s, message, ourtrivia):
         ourtrivia.was_question_asked = True
 
 
-def trivia_answer(s, username, message, trivia_total_time, ourtrivia):
+def trivia_answer(s, username, message, trivia_total_time, ourtrivia, general):
     answer = str(ourtrivia.question[1])
 
-    if fuzz.ratio(answer.lower(), message.lower()) >= 70:
-        twitchchat.chat(s, 'Nice guess ' + username + '! The answer was ' + answer + '!')
+    if fuzz.ratio(answer.lower(), message.lower()) >= 87:
+        twitchchat.chat(s, 'Nice guess ' + username + '! The answer was ' + answer + '! You got 3 points!')
+        general.viewer_objects[username].points += 3
         ourtrivia.trivia_time_start = time.time()
         ourtrivia.trivia_total_time = 0
         ourtrivia.answered = True
         ourtrivia.was_question_asked = False
 
     elif trivia_total_time > 60:
-        twitchchat.chat(s, 'No one guessed it right! The answer was: ' + answer)
-        ourtrivia.trivia_time_start = time.time()
-        ourtrivia.trivia_total_time = 0
-        ourtrivia.answered = True
-        ourtrivia.was_question_asked = False
+        if ourtrivia.trivia_bool is True:
+            twitchchat.chat(s, 'No one guessed it right! The answer was: ' + answer)
+            ourtrivia.trivia_time_start = time.time()
+            ourtrivia.trivia_total_time = 0
+            ourtrivia.answered = True
+            ourtrivia.was_question_asked = False
+        else:
+            ourtrivia.trivia_total_time = 0

@@ -275,17 +275,12 @@ def update_user_chat_lines(date, general):  # this should grab an item from view
             sql_old_chatlines = c1.execute("SELECT Chat FROM Hours WHERE UID=? AND Game=? AND Day=?",
                                            (uid, game, date))
             string_old_chatlines = sql_old_chatlines.fetchone()
-            if string_old_chatlines is None or string_old_chatlines[0] == 'None':
-                string_old_chatlines = 0
+            if string_old_chatlines is None or string_old_chatlines[0] is None:
+                old_chatlines = 0
             else:
-                string_old_chatlines = string_old_chatlines[0]
-
-            c1.execute("UPDATE Hours SET Chat=?+? WHERE UID=? AND Game=? AND Day=?",
-                       (string_old_chatlines,
-                        copy_of_viewerobjects[viewer].chat_line_dict.get(game),
-                        uid,
-                        game,
-                        date))
+                old_chatlines = string_old_chatlines[0]
+            chat_line_total = old_chatlines + copy_of_viewerobjects[viewer].chat_line_dict.get(game)
+            c1.execute("UPDATE Hours SET Chat=? WHERE UID=? AND Game=? AND Day=?", (chat_line_total, uid, game, date))
             general.viewer_objects[viewer].chat_line_dict[game] = 0
     conn1.commit()
     conn1.close()
@@ -313,6 +308,18 @@ def update_user_points(general):
             c.execute("UPDATE ViewerData SET Points=? WHERE User_Name=?",
                       (total_points, viewer))
             general.viewer_objects[viewer].points = 0
+
+        # above is for points below is for level
+
+        sql_old_level = c.execute("SELECT Level FROM ViewerData WHERE User_Name=?", (viewer,))
+        str_old_level = sql_old_level.fetchone()
+        if str_old_level is None or str_old_level[0] is None:
+            str_old_level = 0
+        else:
+            str_old_level = str_old_level[0]
+        combined_level = str_old_level + copy_of_viewerobjects[viewer].level
+        c.execute("UPDATE ViewerData SET Level=? WHERE User_Name=?", (combined_level, viewer))
+        general.viewer_objects[viewer].level = 0
     conn.commit()
     conn.close()
     #except (TypeError, sqlite3.OperationalError) as e:
@@ -591,7 +598,7 @@ def check_users_joindate(get_viewers):  # time based
 
 
 # noinspection PyUnusedLocal  # time based
-def check_mods(get_viewers):  # this needs a way to un-mod a mod as well, not currently implemented
+def check_mods(general):  # this needs a way to un-mod a mod as well, not currently implemented
     try:
         conn = sqlite3.connect(sql_file())
         c = conn.cursor()
@@ -606,18 +613,18 @@ def check_mods(get_viewers):  # this needs a way to un-mod a mod as well, not cu
         fetchall_mod_list = sql_mod_list.fetchall()
         mod_list = []
         if fetchall_mod_list is None:
-            if get_viewers:
-                mod_list.append(get_viewers)
+            if general.get_viewers_func[1]:
+                mod_list.append(general.get_viewers_func[1])
         else:
             for i in fetchall_mod_list:
                 mod_list.append(i[0])
-            if get_viewers:
-                for i in get_viewers:
+            if general.get_viewers_func[1]:
+                for i in general.get_viewers_func[1]:
                     if i in mod_list:
                         pass
                     else:
                         mod_list.append(i)
-        for i in mod_list:  # if the mod isn't in the mod list from the database
+        for i in mod_list:
             sql_find_user = c.execute('SELECT User_Name FROM ViewerData WHERE User_Name = ?', (i,))
             user = sql_find_user.fetchall()
             if not user:
@@ -630,6 +637,9 @@ def check_mods(get_viewers):  # this needs a way to un-mod a mod as well, not cu
                         pass
                     else:
                         c.execute("UPDATE ViewerData SET User_Type = 'Moderator' WHERE User_Name = ?", (i,))
+            if i in mod_list:
+                if i not in general.get_viewers_func[1]:
+                    c.execute("UPDATE ViewerData SET User_Type=Viewer WHERE User_Name=?", (i,))
 
         conn.commit()
         conn.close()
@@ -679,7 +689,7 @@ def combine_db_data(general, username):
     if str_join_game is not None:
         c.execute('UPDATE ViewerData SET Join_Game=? WHERE UID=?', (str_join_game[0], str_new_uid))
 
-    sql_point_check = c.execute('SELECT Updating_Name_Point_Deduction FROM ViewerData WHERE UID?', (old_uid,))
+    sql_point_check = c.execute('SELECT Updating_Name_Point_Deduction FROM ViewerData WHERE UID=?', (old_uid,))
     str_join_game = sql_point_check.fetchone()
     if str_join_game is None:
         c.execute('UPDATE ViewerData SET Updating_Name_Point_Deduction=200 WHERE User_Name=?', (username,))
@@ -690,6 +700,8 @@ def combine_db_data(general, username):
     c.execute('DELETE FROM ViewerData WHERE UID=?', (old_uid,))
 
     c2.execute('UPDATE Hours SET UID=? WHERE UID=?', (str_new_uid, old_uid))
+
+    c.execute('UPDATE ViewerData SET Points=Points-Updating_Name_Point_Deduction WHERE UID=?', (str_new_uid,))
 
     general.viewer_objects[username].old_uid = 0
 
