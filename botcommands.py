@@ -4,6 +4,7 @@
 import random
 import sqlite3
 import re
+import datetime
 from twitchbot import (
     twitchchat,
     encryption_key,
@@ -22,10 +23,9 @@ def hours_file():
     return hrs_file
 
 
-starting_val = '-'
-
-
 def handle_commands(s, username, message, general):
+
+    starting_val = general.starting_val
 
     if message.startswith(starting_val + 'joinmessage'):  # if joinmessage is empty pass
         try:
@@ -170,7 +170,6 @@ def handle_commands(s, username, message, general):
         for game in general.viewer_objects[username].chat_line_dict:
             all_chatlines += general.viewer_objects[username].chat_line_dict[game]
         twitchchat.chat(s, username + ' your total chatlines are ' + str(total_chatlines + all_chatlines))
-        # stopped here
 
         conn1.close()
         conn2.close()
@@ -183,11 +182,10 @@ def handle_commands(s, username, message, general):
         c = conn.cursor()
         sql_user_points = c.execute("SELECT Points FROM ViewerData WHERE User_Name=?", (username,))
         string_user_points = sql_user_points.fetchone()
-        string_user_points = string_user_points[0]
-        string_user_points = round(string_user_points, 2)
+        string_user_points = round(string_user_points[0], 2)
         twitchchat.chat(s, username + " you have " + str(string_user_points +
-                                                         general.viewer_objects[username].points) +
-                        " points!")
+                                                         round(general.viewer_objects[username].points)) + " points!")
+        conn.close()
 
     elif message.startswith(starting_val + "compare"):
         #try:
@@ -425,9 +423,11 @@ def handle_commands(s, username, message, general):
             elif message.startswith(starting_val + 'honor'):  # honor and dishonor don't work yet
                 general.viewer_objects[sec_username].level += 100
                 general.viewer_objects[username].level += 25
+                twitchchat.chat(s, 'Honored %s' % sec_username)
             elif message.startswith(starting_val + 'dishonor'):
                 general.viewer_objects[sec_username].level -= 100
                 general.viewer_objects[username].level += 25
+                twitchchat.chat(s, 'Dishonored %s' % sec_username)
             conn.commit()
             conn.close()
         except IndexError:
@@ -541,6 +541,77 @@ def handle_commands(s, username, message, general):
         twitchchat.chat(s, '%s Your level is %s, and the amount of level points you have is %d' %
                         (username, level_iter, combined_level))
         conn.close()
+
+    elif message.startswith(starting_val + "stats"):
+        conn = sqlite3.connect(hours_file())
+        c = conn.cursor()
+
+        thirty_days_ago = str(datetime.datetime.today().date() + datetime.timedelta(-30))
+        today = str(datetime.datetime.today().date())
+        uid = sql_commands.get_uid_from_username(username)
+
+        sql_hours_last_30_days = c.execute("SELECT Hours FROM Hours WHERE UID=? AND (Day BETWEEN ? AND ?)",
+                                           (uid,
+                                            thirty_days_ago,
+                                            today))
+        str_hours_last_30_days = sql_hours_last_30_days.fetchall()
+
+        sql_chatlines_last_30_days = c.execute("SELECT Chat FROM Hours WHERE UID=? AND (Day BETWEEN ? AND ?)",
+                                               (uid,
+                                                thirty_days_ago,
+                                                today))
+
+        str_chatlines_last_30_days = sql_chatlines_last_30_days.fetchall()
+
+        total_hours_30_days = 0
+        for hours_item in str_hours_last_30_days:
+            if hours_item[0] is not None:
+                total_hours_30_days += hours_item[0]
+
+        total_chatlines_30_days = 0
+        for chat_item in str_chatlines_last_30_days:
+            if chat_item[0] is not None:
+                total_chatlines_30_days += chat_item[0]
+
+        twitchchat.chat(s, '%s your stats for the last 30 days are - Hours spent in stream: %s, Chatlines in stream: %s'
+                        % (username, str(round((total_hours_30_days / 3600), 2)), str(total_chatlines_30_days)))
+
+        conn.close()
+
+    elif message.startswith(starting_val + "give"):
+        try:
+            give_amount = ((message.split()[2]).strip())
+            sec_username = ((message.split()[1]).strip()).lower()
+            if username == sec_username:
+                twitchchat.chat(s, "Nice try %s, -10 points to you!" % username)
+                general.viewer_objects[username].points -= 10
+                int(give_amount)
+            else:
+                conn = sqlite3.connect(sql_file())
+                c = conn.cursor()
+                sql_points = c.execute("SELECT Points FROM ViewerData WHERE User_Name=?", (username,))
+                str_points = sql_points.fetchone()
+                if str_points[0] is None:
+                    twitchchat.chat(s, "%s you don't have that any points yet")
+                else:
+                    if str_points[0] + general.viewer_objects[username].points < int(give_amount):
+                        twitchchat.chat(s, "%s you don\'t have enough points to do that" % username)
+                    else:
+                        if sec_username == (encryption_key.decrypted_chan.lower()).strip() or \
+                                sec_username == (encryption_key.decrypted_nick.lower()).strip():
+                            general.viewer_objects[username].points -= int(give_amount)
+                            general.viewer_objects[sec_username].points += int(give_amount)
+                            twitchchat.chat(s, "%s you have given %s to %s" % (username, give_amount, sec_username))
+                        else:
+                            print(encryption_key.decrypted_chan, encryption_key.decrypted_nick)
+                            twitchchat.chat(s, "As of right now you can only give points to the streamer or the bot")
+                conn.close()
+        except IndexError:
+            twitchchat.chat(s, "%s you must include a number" % username)
+        except KeyError:
+            twitchchat.chat(s, "%s the person you are giving points to must be in the stream" % username)
+        except ValueError:
+            twitchchat.chat(s, "%s you must use the correct format of -give {username} {###}" % username)
 
     for command in general.list_command_dict:
         if message.startswith(command.strip()):

@@ -69,13 +69,14 @@ def trivia_answer(s, username, message, trivia_total_time, ourtrivia, general):
 
     if fuzz.ratio(answer.lower(), message.lower()) >= 87:
         twitchchat.chat(s, 'Nice guess ' + username + '! The answer was ' + answer + '! You got 3 points!')
+        general.viewer_objects[username].trivia_answers += 1
         general.viewer_objects[username].points += 3
         ourtrivia.trivia_time_start = time.time()
         ourtrivia.trivia_total_time = 0
         ourtrivia.answered = True
         ourtrivia.was_question_asked = False
 
-    elif trivia_total_time > 60:
+    elif trivia_total_time > 30:
         if ourtrivia.trivia_bool is True:
             twitchchat.chat(s, 'No one guessed it right! The answer was: ' + answer)
             ourtrivia.trivia_time_start = time.time()

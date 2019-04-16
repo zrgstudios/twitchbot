@@ -58,6 +58,8 @@ class General:
         self.str_command_dict = {}
         self.list_command_dict = {}
 
+        self.starting_val = '-'
+
         self.user_levels = {'Larvae': 120, 'Drone': 240, 'Zergling': 480, 'Baneling': 960, 'Overlord': 1920,
                             'Roach': 3840, 'Ravager': 7680, 'Overseer': 11520, 'Mutalisk': 14400,
                             'Corrupter': 18000, 'Hydralisk': 22500, 'Swarm Host': 28125, 'Locust': 35156,
@@ -213,7 +215,6 @@ def timefunctions():  # make a counter here so not multiple saves occur
                 if general.viewer_objects[viewer].join_message_check is False:
                     pass
                 else:
-                    pass
                     sql_commands.welcome_viewers(
                         s=general.oursocket,
                         general=general,
@@ -238,6 +239,8 @@ def timefunctions():  # make a counter here so not multiple saves occur
             sql_commands.save_chat(general=general)
             sql_commands.update_invited_by(general)
             sql_commands.write_welcome_viewers(general)
+            sql_commands.update_trivia_points(general)
+            sql_commands.update_last_seen(general)
             print(formatted_time(), "Data finished saving")
 
             for viewer in general.viewer_objects:
@@ -268,6 +271,7 @@ def saveviewerchat():
 
             # need to check in save_chat_for_sql if the UID exists, and if not
             # THEN call check_if_user_exists
+            viewerclass.chat_level_movement(user_and_message[0], user_and_message[1], general)
             viewerclass.save_chat_for_sql(
                 date=str(
                     general.todaydate),
@@ -311,7 +315,7 @@ def gamefunctions(message, s, username, ourtrivia, general=general):
         ourtrivia.trivia_time_end = time.time()
         ourtrivia.trivia_bool = True
         ourtrivia.trivia_total_time = ourtrivia.trivia_time_end - ourtrivia.trivia_time_start
-        print(ourtrivia.trivia_total_time)
+        #print(ourtrivia.trivia_total_time)
         trivia_game.trivia_answer(
             message=message,
             s=s,
@@ -323,13 +327,12 @@ def gamefunctions(message, s, username, ourtrivia, general=general):
 
 
 def check_files():
-    if not pathlib.Path('MyFiles/bot_commands.txt'):
-        with open('MyFiles/bot_commands.txt') as f:
-            f.write("""-hello [hello username]\n
-                    -eightball random [No; Yes; Leave me alone; I think we already know the answer to THAT; 
-                    I'm not sure; My sources point to yes; Could be yes, could be no, nobody knows!; Maybe; 
-                    Are you kidding me?; You may rely on it; Outlook not so good; Don't count on it; Most likely; 
-                    Without a doubt; As I see it; yes]""")
+    if not os.path.isfile('MyFiles/bot_commands.txt'):
+        with open('MyFiles/bot_commands.txt', 'w') as f:
+            f.write("-hello [hello username]\n-eightball random [No; Yes; Leave me alone; I think we already know the "
+                    "answer to THAT; I'm not sure; My sources point to yes; Could be yes, could be no, nobody knows!; "
+                    "Maybe; Are you kidding me?; You may rely on it; Outlook not so good; Don't count on it; "
+                    "Most likely; Without a doubt; As I see it; yes]")
 
 
 def first_time():
@@ -340,19 +343,19 @@ def first_time():
         print(directory_path)
         encryption_key.GetUserInput()
 
-    if not pathlib.Path('MyFiles/trivia.txt'):
+    if not os.path.isfile('MyFiles/trivia.txt'):
         with open('MyFiles/trivia.txt', 'w') as f:
             f.write(
-                "{Question}[League of Legends] What is Aatrox's Passive ability called?{Answer}Blood Well\n")
-            f.write(
+                "{Question}[League of Legends] What is Aatrox's Passive ability called?{Answer}Blood Well\n"
+            
                 "{Question}[League of Legends] What is Ahri's Passive ability called?{Answer}Essence Theft\n")
         print('Creating trivia file...')
         time.sleep(1)
 
-    if not pathlib.Path(sql_file()):
+    if not os.path.isfile(sql_file()):
         sql_commands.create_viewer_tables()
 
-    if not pathlib.Path(hours_file()):
+    if not os.path.isfile(hours_file()):
         sql_commands.insert_hours_table()
         sql_commands.get_table_columns()
         print('Creating database and setting up...')
@@ -367,7 +370,7 @@ def first_time():
 def startup():
     sql_commands.get_table_columns()
     sql_commands.check_table_names()
-    get_commands.get_commands(general)
+    check_files()
 
 
 def handle_response(s, response, full_regex):
@@ -398,11 +401,14 @@ def handle_response(s, response, full_regex):
             return [username, whisper_message]
 
         elif ".tmi.twitch.tv PART" in response or ".tmi.twitch.tv JOIN" in response:
-            username = re.search(r"(?<=!)(.*)(?=@)", response).group(0)
-            sql_commands.update_last_seen(username)
+            username = re.search(r"(?<=!)(.*)(?=@)", response)
+            if username is not None:
+                username = username.group(0)
             if "JOIN" in response:
                 viewerclass.add_one_viewerobject(
                     general=general, viewer=username)
+            if username in general.viewer_objects:
+                general.viewer_objects[username].last_seen_date = general.todaydate
             return None
 
         for i in response.split("@badges"):
@@ -426,6 +432,7 @@ def main():  # printing @badges line once, and sometimes skipping messages is a 
         first_time()
         time.sleep(1)
     startup()
+    get_commands.get_commands(general)
 
     func_first_time = first_time()
 

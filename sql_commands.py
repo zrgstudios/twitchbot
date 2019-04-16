@@ -115,6 +115,8 @@ def get_table_columns():  # startup
         c.execute("ALTER TABLE ViewerData ADD COLUMN Join_Game STRING")
     if "Updating_Name_Point_Deduction" not in columns:
         c.execute("ALTER TABLE ViewerData ADD COLUMN Updating_Name_Point_Deduction INTEGER")
+    if "Trivia_Answers" not in columns:
+        c.execute("ALTER TABLE ViewerData ADD COLUMN Trivia_Answers INTEGER")
 
     conn.commit()
     conn.close()
@@ -259,7 +261,6 @@ def update_invited_by(general):
     conn.close()
 
 
-# this cant write to DB because it's already open from where this function is called from
 # will need to save everything in a class nested dict viewer_name{game:chat number}
 def update_user_chat_lines(date, general):  # this should grab an item from viewerclass and add that to game for day
     conn1 = sqlite3.connect(hours_file())
@@ -300,8 +301,10 @@ def update_user_points(general):
             # game = 0, day = 1, time = 2, username = 3
             if game == "Offline":
                 points = 0.001 * general.viewer_objects[viewer].seconds.get(game)
+                general.viewer_objects[viewer].level += general.viewer_objects[viewer].seconds.get(game) * .005
             else:
                 points = 0.016 * general.viewer_objects[viewer].seconds.get(game)
+                general.viewer_objects[viewer].level += general.viewer_objects[viewer].seconds.get(game) * .05
             sql_oldpoints = c.execute("SELECT Points FROM ViewerData WHERE User_Name=?", (viewer,))
             string_oldpoints = sql_oldpoints.fetchone()[0]
             total_points = float(string_oldpoints) + float(points) + general.viewer_objects[viewer].points
@@ -317,13 +320,30 @@ def update_user_points(general):
             str_old_level = 0
         else:
             str_old_level = str_old_level[0]
-        combined_level = str_old_level + copy_of_viewerobjects[viewer].level
+        combined_level = str_old_level + general.viewer_objects[viewer].level
         c.execute("UPDATE ViewerData SET Level=? WHERE User_Name=?", (combined_level, viewer))
         general.viewer_objects[viewer].level = 0
     conn.commit()
     conn.close()
-    #except (TypeError, sqlite3.OperationalError) as e:
-      #  pass
+    # except (TypeError, sqlite3.OperationalError) as e:
+    # pass
+
+
+def update_trivia_points(general):
+    conn = sqlite3.connect(sql_file())
+    c = conn.cursor()
+    for username in general.viewer_objects:
+        trivia_points = general.viewer_objects[username].trivia_answers
+        if trivia_points > 0:
+            sql_trivia_points = c.execute("SELECT Trivia_Answers FROM ViewerData WHERE User_Name=?", (username,))
+            str_trivia_points = sql_trivia_points.fetchone()[0]
+            if str_trivia_points[0] is None:
+                str_trivia_points = 0
+            else:
+                str_trivia_points = str_trivia_points[0]
+            c.execute("UPDATE ViewerData SET Trivia_Answers=? WHERE User_Name=?", (str_trivia_points, username,))
+    conn.commit()
+    conn.close()
 
 
 def update_bots():  # time based
@@ -365,20 +385,19 @@ def get_bot_list():  # time based
     return bot_list
 
 
-def update_last_seen(username):  # time based
-    try:
-        conn = sqlite3.connect(sql_file())
-        c = conn.cursor()
-        today = str(datetime.datetime.today())
-        today = today[0:10]
+def update_last_seen(general):
+    conn = sqlite3.connect(sql_file())
+    c = conn.cursor()
+    for username in general.viewer_objects:
+        last_seen = general.viewer_objects[username].last_seen_date
+        if last_seen is not None:
 
-        c.execute("UPDATE ViewerData SET Last_Seen = ? WHERE User_Name = ?", (today, username,))
+            c.execute("UPDATE ViewerData SET Last_Seen = ? WHERE User_Name = ?",
+                      (general.viewer_objects[username].last_seen_date, username,))
+            general.viewer_objects[username].last_seen_date = None
 
-        conn.commit()
-        conn.close()
-    except sqlite3.OperationalError as e:
-        pass
-    # print(e, 366)
+    conn.commit()
+    conn.close()
 
 
 # chat sometimes saves without the uid if the user isn't in DB yet
@@ -597,54 +616,44 @@ def check_users_joindate(get_viewers):  # time based
         #print(e, 566)
 
 
-# noinspection PyUnusedLocal  # time based
-def check_mods(general):  # this needs a way to un-mod a mod as well, not currently implemented
-    try:
-        conn = sqlite3.connect(sql_file())
-        c = conn.cursor()
-        bot_list = get_bot_list()
-        bot_username_list = []
-        for i in bot_list:
-            sql_bot_username = c.execute("SELECT User_Name FROM ViewerData WHERE UID=?", (i,))
-            string_bot_username = sql_bot_username.fetchone()
-            bot_username_list.append(string_bot_username[0])
+def check_mods(general):  # bots should be able to be mods
+    #try:
+    conn = sqlite3.connect(sql_file())
+    c = conn.cursor()
 
-        sql_mod_list = c.execute("SELECT User_Name FROM ViewerData WHERE User_Type = 'Moderator'")
-        fetchall_mod_list = sql_mod_list.fetchall()
-        mod_list = []
-        if fetchall_mod_list is None:
-            if general.get_viewers_func[1]:
-                mod_list.append(general.get_viewers_func[1])
-        else:
-            for i in fetchall_mod_list:
-                mod_list.append(i[0])
-            if general.get_viewers_func[1]:
-                for i in general.get_viewers_func[1]:
-                    if i in mod_list:
-                        pass
-                    else:
-                        mod_list.append(i)
-        for i in mod_list:
-            sql_find_user = c.execute('SELECT User_Name FROM ViewerData WHERE User_Name = ?', (i,))
-            user = sql_find_user.fetchall()
-            if not user:
-                pass
-            else:
-                if i == encryption_key.decrypted_chan.lower():
-                    c.execute("UPDATE ViewerData SET User_Type = 'Streamer' WHERE User_Name = ?", (i,))
+    sql_mod_list = c.execute("SELECT User_Name FROM ViewerData WHERE User_Type = 'Moderator'")
+    fetchall_mod_list = sql_mod_list.fetchall()
+    mod_list = []
+    if fetchall_mod_list is None:
+        if general.get_viewers_func[1]:
+            mod_list.append(general.get_viewers_func[1])
+    else:
+        for i in fetchall_mod_list:
+            mod_list.append(i[0])
+        if general.get_viewers_func[1]:
+            for i in general.get_viewers_func[1]:
+                if i in mod_list:
+                    pass
                 else:
-                    if i in bot_username_list:
-                        pass
-                    else:
-                        c.execute("UPDATE ViewerData SET User_Type = 'Moderator' WHERE User_Name = ?", (i,))
-            if i in mod_list:
-                if i not in general.get_viewers_func[1]:
-                    c.execute("UPDATE ViewerData SET User_Type=Viewer WHERE User_Name=?", (i,))
+                    mod_list.append(i)
+    for i in mod_list:
+        sql_find_user = c.execute('SELECT User_Name FROM ViewerData WHERE User_Name = ?', (i,))
+        user = sql_find_user.fetchall()
+        if not user:
+            pass
+        else:
+            if i == encryption_key.decrypted_chan.lower():
+                c.execute("UPDATE ViewerData SET User_Type = 'Streamer' WHERE User_Name = ?", (i,))
 
-        conn.commit()
-        conn.close()
-    except (TypeError, sqlite3.OperationalError) as e:
-        pass
+            c.execute("UPDATE ViewerData SET User_Type = 'Moderator' WHERE User_Name = ?", (i,))
+
+        if i not in general.get_viewers_func[1]:
+            c.execute("UPDATE ViewerData SET User_Type='Viewer' WHERE User_Name=?", (i,))
+
+    conn.commit()
+    conn.close()
+    #except (TypeError, sqlite3.OperationalError) as e:
+        #pass
         # print(e, 'Typerror or DB lock')
 
 
@@ -654,8 +663,11 @@ def get_uid_from_username(username):
         c = conn.cursor()
         sql_uid = c.execute("SELECT UID FROM ViewerData WHERE User_Name=?", (username,))
         string_uid = sql_uid.fetchone()[0]
+        #print(string_uid, username)
+        conn.close()
         return string_uid
     except TypeError as e:
+        print(675, username, e)
         return False
 
 

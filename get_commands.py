@@ -4,6 +4,7 @@ print('Importing commands')
 
 
 def get_commands(general):
+
     with open("MyFiles/bot_commands.txt") as f:
         x = f.readlines()
 

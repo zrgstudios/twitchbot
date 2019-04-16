@@ -19,37 +19,36 @@ class Viewer:
         self.invited_by = None
 
         self.old_uid = 0
+        self.last_honored = 0
+        self.last_dishonored = 0
 
+        self.trivia_answers = 0
 
-user_levels = {'Larvae': 120, 'Drone': 240, 'Zergling': 480, 'Baneling': 960, 'Overlord': 1920, 'Roach': 3840,
-               'Ravager': 7680, 'Overseer': 11520, 'Mutalisk': 14400, 'Corrupter': 18000, 'Hydralisk': 22500,
-               'Swarm Host': 28125, 'Locust': 35156, 'Infestor': 43945, 'Lurker': 50537, 'Viper': 58117,
-               'Ultralisk': 66835, 'Broodlord': 75523, 'Dark Archon': 123139, 'Abathur': 200000, 'Alexi Stukov': 300000,
-               'Cerebrate': 400000, 'The Overmind': 500000, 'Kerrigan': 700000}
+        self.last_seen_date = None
 
 
 def create_all_viewerobjects(getviewers, general):
     for viewer in getviewers:
         if viewer not in general.viewer_objects:
             if sql_commands.get_uid_from_username(viewer) is False:
+                print(34, viewer)
                 pass
             else:
                 create_viewer = Viewer()
                 create_viewer.name = viewer
                 general.viewer_objects[viewer] = create_viewer
                 general.viewer_objects[viewer].uid = sql_commands.get_uid_from_username(viewer)
-                if general.viewer_objects[viewer].uid is None or general.viewer_objects[viewer].uid == 'None':
-                    pass
 
 
 def add_one_viewerobject(general, viewer):  # saving viewer objects to general class variable
     if viewer not in general.viewer_objects:
-        create_viewer = Viewer()
-        create_viewer.name = viewer
-        general.viewer_objects[create_viewer.name] = create_viewer
-        general.viewer_objects[viewer].uid = sql_commands.get_uid_from_username(viewer)
-        if general.viewer_objects[viewer].uid is None or general.viewer_objects[viewer].uid == 'None':
+        if sql_commands.get_uid_from_username(viewer) is False:
             pass
+        else:
+            create_viewer = Viewer()
+            create_viewer.name = viewer
+            general.viewer_objects[create_viewer.name] = create_viewer
+            general.viewer_objects[viewer].uid = sql_commands.get_uid_from_username(viewer)
 
 
 def time_level_movement(viewer, general):
@@ -58,7 +57,8 @@ def time_level_movement(viewer, general):
     # 60 seconds in a minute, 10 minutes = 600 * .01 = 60 points
 
 
-def chat_level_movement(viewer, message, starting_val, general):  # this entire thing should be moved to botcommands
+def chat_level_movement(viewer, message, general):  # this entire thing should be moved to botcommands
+    starting_val = general.starting_val
     if message.startswith(starting_val + "honor"):
         # this should give points both to honored person and person who honored them
         general.viewer_objects[viewer].level += 100
