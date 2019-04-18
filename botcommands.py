@@ -14,13 +14,8 @@ from twitchbot import (
 
 
 def sql_file():
-    sqlite_file = r'MyFiles\ViewerData_' + encryption_key.decrypted_chan + '.sqlite'
+    sqlite_file = r'MyFiles\ViewerData2_' + encryption_key.decrypted_chan + '.sqlite'
     return sqlite_file
-
-
-def hours_file():
-    hrs_file = r'MyFiles\hours_' + encryption_key.decrypted_chan + '.sqlite'
-    return hrs_file
 
 
 def handle_commands(s, username, message, general):
@@ -45,8 +40,9 @@ def handle_commands(s, username, message, general):
                 twitchchat.chat(s, username + ', your message has been saved at the cost of 1000 points!')
                 if username in general.no_joinmessage:
                     general.no_joinmessage.remove(username)
-        except AttributeError:
+        except AttributeError as e:
             pass
+            #print(44, e)
 
     elif message.startswith(starting_val + "remove_joinmessage"):  # make this worth nothing
         general.viewer_objects[username].join_message_check = "remove_joinmessage"
@@ -89,17 +85,15 @@ def handle_commands(s, username, message, general):
         count = 0
 
         if count == 0:
-            conn1 = sqlite3.connect(hours_file())
+            conn1 = sqlite3.connect(sql_file())
             c1 = conn1.cursor()
-            conn2 = sqlite3.connect(sql_file())
-            c2 = conn2.cursor()
 
-            sql_games = c1.execute('SELECT DISTINCT Game FROM Hours')
+            sql_games = c1.execute('SELECT DISTINCT Game FROM Daily_Stats')
             string_games = sql_games.fetchall()
             for i in string_games:
                 game_list.append(i[0])
 
-            sql_uid = c2.execute('SELECT UID FROM ViewerData WHERE User_Name=?', (username,))
+            sql_uid = c1.execute('SELECT UID FROM ViewerData WHERE User_Name=?', (username,))
             string_uid = sql_uid.fetchone()
 
             hours_strip = message.replace(starting_val + 'hours ', '')
@@ -111,7 +105,7 @@ def handle_commands(s, username, message, general):
                 elif game == 'SC2':
                     game = 'StarCraftII'
 
-                sql_game = c1.execute('SELECT Hours FROM Hours WHERE Game=? AND UID=?', (game.capitalize(), string_uid[0]))
+                sql_game = c1.execute('SELECT Seconds FROM Daily_Stats WHERE Game=? AND UID=?', (game.capitalize(), string_uid[0]))
                 string_game = sql_game.fetchall()
                 for i in string_game:
                     hl.append(i[0])
@@ -128,7 +122,7 @@ def handle_commands(s, username, message, general):
             else:
                 try:
                     hours_list = []
-                    sql_hours = c1.execute("SELECT Hours FROM Hours WHERE UID=? AND Game NOT IN ('Offline')",
+                    sql_hours = c1.execute("SELECT Seconds FROM Daily_Stats WHERE UID=? AND Game NOT IN ('Offline')",
                                            (string_uid[0],))
                     string_hours = sql_hours.fetchall()
 
@@ -145,19 +139,16 @@ def handle_commands(s, username, message, general):
                     twitchchat.chat(s, 'Please wait a minute' + username + ', we are still adding you to the database!')
 
             conn1.close()
-            conn2.close()
 
     elif message.startswith(starting_val + 'chatlines'):
-        conn1 = sqlite3.connect(hours_file())
+        conn1 = sqlite3.connect(sql_file())
         c1 = conn1.cursor()
-        conn2 = sqlite3.connect(sql_file())
-        c2 = conn2.cursor()
 
-        sql_uid = c2.execute('SELECT UID FROM ViewerData WHERE User_Name=?', (username,))
+        sql_uid = c1.execute('SELECT UID FROM ViewerData WHERE User_Name=?', (username,))
         string_uid = sql_uid.fetchone()
 
         chat_list = []
-        sql_chat_lines = c1.execute('SELECT Chat FROM Hours Where UID=?', (string_uid[0],))
+        sql_chat_lines = c1.execute('SELECT Chat FROM Daily_Stats Where UID=?', (string_uid[0],))
         string_chat_lines = sql_chat_lines.fetchall()
         for i in string_chat_lines:
             if i[0] is None:
@@ -172,7 +163,6 @@ def handle_commands(s, username, message, general):
         twitchchat.chat(s, username + ' your total chatlines are ' + str(total_chatlines + all_chatlines))
 
         conn1.close()
-        conn2.close()
 
     elif message.startswith(starting_val + 'appsignup'):
         twitchchat.chat(s, 'https://goo.gl/forms/Cmf7aVBrZNSbGbQX2')
@@ -190,8 +180,11 @@ def handle_commands(s, username, message, general):
     elif message.startswith(starting_val + "compare"):
         #try:
         keyword = ((message.split(' ')[1]).strip()).capitalize()
-        if keyword == "Points" or keyword == "Hours" or keyword == "Chatlines" or keyword == "Level":
+        if keyword == "Points" or keyword == "Hours" or keyword == "Chatlines" or keyword == "Honor":
             sec_username = ((message.split(' ')[2]).strip()).lower()
+            if keyword == "Hours":
+                keyword = "Seconds"
+
             if keyword == "Points":
                 conn = sqlite3.connect(sql_file())
                 c = conn.cursor()
@@ -211,30 +204,28 @@ def handle_commands(s, username, message, general):
                                 + str(round(string_points2[0], 2)) + ", that's a difference of " + str(difference))
                 conn.close()
 
-            elif keyword == "Level":
+            elif keyword == "Honor":
                 conn = sqlite3.connect(sql_file())
                 c = conn.cursor()
-                sql_level1 = c.execute("SELECT Level FROM ViewerData Where User_Name=?", (username,))
-                string_level1 = sql_level1.fetchone()
-                sql_level2 = c.execute("SELECT Level FROM ViewerData Where User_Name=?", (sec_username,))
-                string_level2 = sql_level2.fetchone()
+                sql_honor1 = c.execute("SELECT Honor FROM ViewerData Where User_Name=?", (username,))
+                string_honor1 = sql_honor1.fetchone()
+                sql_honor2 = c.execute("SELECT Honor FROM ViewerData Where User_Name=?", (sec_username,))
+                string_honor2 = sql_honor2.fetchone()
 
-                difference = (abs(int(string_level1[0]) + general.viewer_objects[username].points - int
-                              (string_level2[0]) + general.viewer_objects[sec_username].points))
-                twitchchat.chat(s, username + " has " + str(round(string_level1[0], 2)) + ", " + sec_username + " has "
-                                + str(round(string_level2[0], 2)) + ", that's a difference of " + str(int(difference)))
+                difference = (abs(int(string_honor1[0]) + general.viewer_objects[username].points - int
+                              (string_honor2[0]) + general.viewer_objects[sec_username].points))
+                twitchchat.chat(s, username + " has " + str(round(string_honor1[0], 2)) + ", " + sec_username + " has "
+                                + str(round(string_honor2[0], 2)) + ", that's a difference of " + str(int(difference)))
                 conn.close()
 
             else:
-                conn1 = sqlite3.connect(hours_file())
+                conn1 = sqlite3.connect(sql_file())
                 c1 = conn1.cursor()
-                conn2 = sqlite3.connect(sql_file())
-                c2 = conn2.cursor()
 
-                sql_uid1 = c2.execute("SELECT UID FROM ViewerData WHERE User_Name=?", (username,))
+                sql_uid1 = c1.execute("SELECT UID FROM ViewerData WHERE User_Name=?", (username,))
                 string_uid1 = sql_uid1.fetchone()
                 string_uid1 = string_uid1[0]
-                sql_uid2 = c2.execute("SELECT UID FROM ViewerData WHERE User_Name=?", (sec_username,))
+                sql_uid2 = c1.execute("SELECT UID FROM ViewerData WHERE User_Name=?", (sec_username,))
                 string_uid2 = sql_uid2.fetchone()
                 if string_uid2 is None:
                     pass
@@ -242,7 +233,7 @@ def handle_commands(s, username, message, general):
                     if keyword == 'Chatlines':
                         keyword = 'Chat'
                     string_uid2 = string_uid2[0]
-                    sql_keyword_grab1 = c1.execute("SELECT %s FROM Hours WHERE UID=? AND Game NOT IN ('Offline')"
+                    sql_keyword_grab1 = c1.execute("SELECT %s FROM Daily_Stats WHERE UID=? AND Game NOT IN ('Offline')"
                                                    % keyword,
                                                    (string_uid1,))
                     string_keyword_grab1 = sql_keyword_grab1.fetchall()
@@ -255,7 +246,7 @@ def handle_commands(s, username, message, general):
                         keyword_sum1.append(num)
                     sum1_total = sum(keyword_sum1)
 
-                    sql_keyword_grab2 = c1.execute("SELECT %s FROM Hours WHERE UID=? AND Game NOT IN ('Offline')"
+                    sql_keyword_grab2 = c1.execute("SELECT %s FROM Daily_Stats WHERE UID=? AND Game NOT IN ('Offline')"
                                                    % keyword,
                                                    (string_uid2,))
                     string_keyword_grab2 = sql_keyword_grab2.fetchall()
@@ -275,7 +266,7 @@ def handle_commands(s, username, message, general):
                         twitchchat.chat(s, username + " has " + str(sum1_total) + " chatlines, " + sec_username +
                                         " has " +
                                         str(sum2_total) + " chatlines, that's a difference of " + str(difference))
-                    elif keyword == 'Hours':
+                    elif keyword == 'Seconds':
                         difference = abs(round(difference/3600, 2))
                         sum1_total = round((sum1_total/3600), 2)
                         sum2_total = round((sum2_total/3600), 2)
@@ -283,7 +274,6 @@ def handle_commands(s, username, message, general):
                                         str(sum2_total) + ", that's a difference of " + str(difference) + '!')
 
                 conn1.close()
-                conn2.close()
         # except (TypeError, sqlite3.OperationalError, IndexError) as e:
         #    print(e, 237)
 
@@ -294,19 +284,20 @@ def handle_commands(s, username, message, general):
             keyword = keyword.capitalize()
             keyword = keyword.strip()
             if keyword == "Hours" or keyword == "Points" or keyword == "Chatlines":
+                if keyword == "Hours":
+                    keyword = "Seconds"
 
-                conn1 = sqlite3.connect(hours_file())
+                conn1 = sqlite3.connect(sql_file())
                 c1 = conn1.cursor()
-                conn2 = sqlite3.connect(sql_file())
-                c2 = conn2.cursor()
 
-                sql_uid_list = c2.execute("SELECT UID FROM ViewerData")
+                sql_uid_list = c1.execute("SELECT UID FROM ViewerData")
                 string_uid_list = sql_uid_list.fetchall()
                 uid_dict = {}
                 for i in string_uid_list:
-                    if keyword == "Hours":
+                    if keyword == "Seconds":
                         sql_hours_per_uid = c1.execute \
-                            ("SELECT COALESCE (SUM(Hours), 0) FROM Hours WHERE UID=? AND Game NOT IN ('Offline')",
+                            ("SELECT COALESCE (SUM(Seconds), 0) FROM Daily_Stats WHERE UID=? AND Game NOT IN "
+                             "('Offline')",
                              (i[0],))
                         string_hours_per_uid = sql_hours_per_uid.fetchone()
                         if i[0] in bots:
@@ -314,7 +305,7 @@ def handle_commands(s, username, message, general):
                         else:
                             uid_dict[i[0]] = string_hours_per_uid
                     elif keyword == "Points":
-                        sql_points_per_uid = c2.execute("SELECT Points FROM ViewerData WHERE UID=?", (i[0],))
+                        sql_points_per_uid = c1.execute("SELECT Points FROM ViewerData WHERE UID=?", (i[0],))
                         string_points_per_uid = sql_points_per_uid.fetchone()
                         if i[0] in bots:
                             pass
@@ -322,7 +313,7 @@ def handle_commands(s, username, message, general):
                             uid_dict[i[0]] = string_points_per_uid
                     else:
                         sql_keyword_per_uid = c1.execute(
-                            "SELECT COALESCE (SUM(Chat), 0) FROM Hours WHERE UID=?", (i[0],))
+                            "SELECT COALESCE (SUM(Chat), 0) FROM Daily_Stats WHERE UID=?", (i[0],))
                         string_keyword_per_uid = sql_keyword_per_uid.fetchone()
                         if i[0] in bots:
                             pass
@@ -330,7 +321,6 @@ def handle_commands(s, username, message, general):
                             uid_dict[i[0]] = string_keyword_per_uid
 
                 conn1.close()
-                conn2.close()
 
                 dict_vals = sorted(uid_dict.items(), key=lambda d: d[1][0], reverse=True)[:10]
 
@@ -340,7 +330,7 @@ def handle_commands(s, username, message, general):
                     string_join = "The top ten chatters are - "
                 elif keyword == "Points":
                     string_join = "The top ten point holders are - "
-                elif keyword == "Hours":
+                elif keyword == "Seconds":
                     string_join = "The top ten watchers are - "
 
                 conn = sqlite3.connect(sql_file())
@@ -349,7 +339,7 @@ def handle_commands(s, username, message, general):
                     sql_username = c.execute("SELECT User_Name FROM ViewerData WHERE UID=?", (uid,))
                     string_username = sql_username.fetchone()
                     string_username = string_username[0]
-                    if keyword == "Hours":
+                    if keyword == "Seconds":
                         value = int(value / 3600)
                     elif keyword == "Points":
                         value = round(float(value), 2)
@@ -359,8 +349,9 @@ def handle_commands(s, username, message, general):
                 twitchchat.chat(s, string_join)
             else:
                 pass
-        except (ValueError, sqlite3.OperationalError, IndexError):
+        except (ValueError, sqlite3.OperationalError, IndexError) as e:
             pass
+            #print(352, e)
 
     elif message.startswith(starting_val + "testme"):
         conn = sqlite3.connect(sql_file())
@@ -416,17 +407,17 @@ def handle_commands(s, username, message, general):
                         # will throw error if username entered wrong
                         general.viewer_objects[username].points += 50
                         general.viewer_objects[sec_username].points += 100
-                        viewerclass.invite_level_movement(general=general,
+                        viewerclass.invite_honor_movement(general=general,
                                                           inviter_viewer=username)
                         twitchchat.chat(s, "Points added to you " + username + " and " + sec_username)
 
             elif message.startswith(starting_val + 'honor'):  # honor and dishonor don't work yet
-                general.viewer_objects[sec_username].level += 100
-                general.viewer_objects[username].level += 25
+                general.viewer_objects[sec_username].honor += 100
+                general.viewer_objects[username].honor += 25
                 twitchchat.chat(s, 'Honored %s' % sec_username)
             elif message.startswith(starting_val + 'dishonor'):
-                general.viewer_objects[sec_username].level -= 100
-                general.viewer_objects[username].level += 25
+                general.viewer_objects[sec_username].honor -= 100
+                general.viewer_objects[username].honor += 25
                 twitchchat.chat(s, 'Dishonored %s' % sec_username)
             conn.commit()
             conn.close()
@@ -527,36 +518,36 @@ def handle_commands(s, username, message, general):
 
         conn.close()
 
-    elif message.startswith(starting_val + 'level'):
+    elif message.startswith(starting_val + 'honor'):
         conn = sqlite3.connect(sql_file())
         c = conn.cursor()
-        sql_level = c.execute('SELECT Level FROM ViewerData WHERE User_Name=?', (username,))
-        str_level = sql_level.fetchone()
-        level_iter = "Larvae"
-        combined_level = 0
+        sql_honor = c.execute('SELECT Honor FROM ViewerData WHERE User_Name=?', (username,))
+        str_honor = sql_honor.fetchone()
+        honor_iter = "Larvae"
+        combined_honor = 0
         for curr_level in general.user_levels:
-            combined_level = str_level[0] + general.viewer_objects[username].level
-            if combined_level > general.user_levels[curr_level]:
-                level_iter = curr_level
+            combined_honor = str_honor[0] + general.viewer_objects[username].honor
+            if combined_honor > general.user_levels[curr_level]:
+                honor_iter = curr_level
         twitchchat.chat(s, '%s Your level is %s, and the amount of level points you have is %d' %
-                        (username, level_iter, combined_level))
+                        (username, honor_iter, combined_honor))
         conn.close()
 
     elif message.startswith(starting_val + "stats"):
-        conn = sqlite3.connect(hours_file())
+        conn = sqlite3.connect(sql_file())
         c = conn.cursor()
 
         thirty_days_ago = str(datetime.datetime.today().date() + datetime.timedelta(-30))
         today = str(datetime.datetime.today().date())
         uid = sql_commands.get_uid_from_username(username)
 
-        sql_hours_last_30_days = c.execute("SELECT Hours FROM Hours WHERE UID=? AND (Day BETWEEN ? AND ?)",
+        sql_hours_last_30_days = c.execute("SELECT Seconds FROM Daily_Stats WHERE UID=? AND (Day BETWEEN ? AND ?)",
                                            (uid,
                                             thirty_days_ago,
                                             today))
         str_hours_last_30_days = sql_hours_last_30_days.fetchall()
 
-        sql_chatlines_last_30_days = c.execute("SELECT Chat FROM Hours WHERE UID=? AND (Day BETWEEN ? AND ?)",
+        sql_chatlines_last_30_days = c.execute("SELECT Chat FROM Daily_Stats WHERE UID=? AND (Day BETWEEN ? AND ?)",
                                                (uid,
                                                 thirty_days_ago,
                                                 today))

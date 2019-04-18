@@ -26,7 +26,9 @@ from twitchbot import (
     trivia_game,
     verify_streamer,
     viewerclass,
-    get_commands,)
+    get_commands,
+    twitchchat,
+    merge_databases)
 
 
 fkey = encryption_key.fkey
@@ -77,14 +79,7 @@ general = General()
 
 def sql_file():
     return pathlib.Path(
-        r'MyFiles\ViewerData_' +
-        encryption_key.decrypted_chan +
-        '.sqlite')
-
-
-def hours_file():
-    return pathlib.Path(
-        r'MyFiles\hours_' +
+        r'MyFiles\ViewerData2_' +
         encryption_key.decrypted_chan +
         '.sqlite')
 
@@ -190,7 +185,7 @@ def saveviewertime():
                 if int(general.total_hourstime) % 5 == 0:
                     game_name = general.game_name
 
-                    viewerclass.save_hours_for_sql(
+                    viewerclass.save_seconds_for_sql(
                         getviewers=general.get_viewers_func[0] + general.get_viewers_func[1],
                         game=game_name,
                         seconds=general.hourstime_difference,
@@ -221,12 +216,18 @@ def timefunctions():  # make a counter here so not multiple saves occur
                         getviewers=general.get_viewers_func[0] + general.get_viewers_func[1],
                         currtime=int(time.time()))
 
-        if general.total_hourstime > 300:
+        if len(general.get_viewers_func[0] + general.get_viewers_func[1]) < 100:
+            #print(len(general.get_viewers_func[0] + general.get_viewers_func[1]))
+            timer = 300
+        else:
+            #print(len(general.get_viewers_func[0] + general.get_viewers_func[1]))
+            timer = len(general.get_viewers_func[0] + general.get_viewers_func[1]) * 2
+        if general.total_hourstime > timer:
             general.game_name = current_game.game_name()
             viewerclass.create_all_viewerobjects(
                 general.get_viewers_func[0] + general.get_viewers_func[1], general)
 
-            sql_commands.update_all_users_hours(general=general, todaydate=general.todaydate)
+            sql_commands.update_all_users_seconds(general=general, todaydate=general.todaydate)
             sql_commands.update_user_points(general=general)
             sql_commands.update_user_chat_lines(
                 date=general.todaydate, general=general)
@@ -256,53 +257,60 @@ def timefunctions():  # make a counter here so not multiple saves occur
 
 def saveviewerchat():
     s = general.oursocket
-    full_regex = re.compile(
-        r":([\w|?_]+)!\w+@\w+.tmi.twitch.tv PRIVMSG #\w+ :(.+)")
-    # twitchchat.chat(s, 'This bot was created by zerg3rr at twitch dot tv')
-    while True:
-        response = s.recv(1024).decode("utf-8")
-        user_and_message = handle_response(
-            s=s, response=response, full_regex=full_regex)
+    try:
+        full_regex = re.compile(
+            r":([\w|?_]+)!\w+@\w+.tmi.twitch.tv PRIVMSG #\w+ :(.+)")
+        #twitchchat.chat(s, 'LET ME LIVE')
+        while True:
+            response = s.recv(1024).decode("utf-8")
+            user_and_message = handle_response(
+                s=s, response=response, full_regex=full_regex)
 
-        game_name = general.game_name
+            game_name = general.game_name
 
-        if user_and_message:
-            general.todaydate = datetime.datetime.today().date()
+            if user_and_message:
+                general.todaydate = datetime.datetime.today().date()
 
-            # need to check in save_chat_for_sql if the UID exists, and if not
-            # THEN call check_if_user_exists
-            viewerclass.chat_level_movement(user_and_message[0], user_and_message[1], general)
-            viewerclass.save_chat_for_sql(
-                date=str(
-                    general.todaydate),
-                formatted_time=formatted_time(),
-                game=game_name,
-                username=user_and_message[0],
-                message=user_and_message[1],
-                general=general)
+                # need to check in save_chat_for_sql if the UID exists, and if not
+                # THEN call check_if_user_exists
+                viewerclass.chat_honor_movement(user_and_message[0], user_and_message[1], general)
+                viewerclass.save_chat_for_sql(
+                    date=str(
+                        general.todaydate),
+                    formatted_time=formatted_time(),
+                    game=game_name,
+                    username=user_and_message[0],
+                    message=user_and_message[1],
+                    general=general)
 
-            viewerclass.add_one_viewerobject(general, user_and_message[0])
-            general.viewer_objects[user_and_message[0]].points += .2
-            if game_name not in general.viewer_objects[user_and_message[0]].chat_line_dict:
-                general.viewer_objects[user_and_message[0]].chat_line_dict[game_name] = 1
-            else:
-                general.viewer_objects[user_and_message[0]].chat_line_dict[game_name] += 1
+                viewerclass.add_one_viewerobject(general, user_and_message[0])
+                if user_and_message[0] not in general.viewer_objects:
+                    viewerclass.add_one_viewerobject(general, user_and_message[0])
+                else:
+                    general.viewer_objects[user_and_message[0]].points += .2
+                    if game_name not in general.viewer_objects[user_and_message[0]].chat_line_dict:
+                        general.viewer_objects[user_and_message[0]].chat_line_dict[game_name] = 1
+                    else:
+                        general.viewer_objects[user_and_message[0]].chat_line_dict[game_name] += 1
 
-            botcommands.handle_commands(
-                s,
-                username=user_and_message[0],
-                message=user_and_message[1],
-                general=general)
+                """botcommands.handle_commands(
+                    s,
+                    username=user_and_message[0],
+                    message=user_and_message[1],
+                    general=general)
+    
+                gamefunctions(
+                    message=user_and_message[1],
+                    s=s,
+                    username=user_and_message[0],
+                    ourtrivia=general.trivia, general=general)"""
+            # handle_files()
+    except UnicodeDecodeError:
+        print("UTF-8 decode error")
+        general.oursocket = connect_socket()
 
-            gamefunctions(
-                message=user_and_message[1],
-                s=s,
-                username=user_and_message[0],
-                ourtrivia=general.trivia, general=general)
-        # handle_files()
 
-
-def gamefunctions(message, s, username, ourtrivia, general=general):
+def gamefunctions(message, s, username, ourtrivia):
     # error_log()
     # print(319, ourtrivia.trivia_total_time)
     if len(ourtrivia.question_list) == 0:
@@ -352,12 +360,6 @@ def first_time():
         print('Creating trivia file...')
         time.sleep(1)
 
-    if not os.path.isfile(sql_file()):
-        sql_commands.create_viewer_tables()
-
-    if not os.path.isfile(hours_file()):
-        sql_commands.insert_hours_table()
-        sql_commands.get_table_columns()
         print('Creating database and setting up...')
         time.sleep(2)
         print('Verifying streamer...')
@@ -367,10 +369,25 @@ def first_time():
         return False
 
 
+def db_merge():
+    directory = r'MyFiles/'
+    if os.path.isfile(merge_databases.sql_file()):
+        print('MERGING DATABASE 1 PLEASE DO NOT CLOSE THE APPLICATION')
+        merge_databases.copy_viewerdata()
+        os.rename(directory + 'ViewerData_' + encryption_key.decrypted_chan + '.sqlite',
+                  directory + 'old_ViewerData_' + encryption_key.decrypted_chan + '.sqlite')
+    if os.path.isfile(merge_databases.hours_file()):
+        print('MERGING DATABASE 2 PLEASE DO NOT CLOSE THE APPLICATION')
+        merge_databases.copy_hoursdata()
+        os.rename(directory + 'hours_' + encryption_key.decrypted_chan + '.sqlite',
+                  directory + 'old_hours_' + encryption_key.decrypted_chan + '.sqlite')
+
+
 def startup():
-    sql_commands.get_table_columns()
     sql_commands.check_table_names()
+    sql_commands.get_table_columns()
     check_files()
+    db_merge()
 
 
 def handle_response(s, response, full_regex):
@@ -428,9 +445,6 @@ def main():  # printing @badges line once, and sometimes skipping messages is a 
     if not os.path.exists('MyFiles/cfg.txt'):
         encryption_key.GetUserInput()
         first_time()
-    if not sql_file().is_file():
-        first_time()
-        time.sleep(1)
     startup()
     get_commands.get_commands(general)
 

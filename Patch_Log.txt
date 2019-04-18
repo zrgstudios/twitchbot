@@ -30,6 +30,16 @@ Known Bugs - Doing -trivia for first time will cause the question and answer to 
 - Fixed a bug which kept chatlines from saving to database
 - Added an automatic unmod function (moderators who have been unmodded will be unmodded in the bot database as well (not instant))
 - Added a "level" function, this level moves based on how nice viewers are being, alpha stage (looooong alpha)
-- Users now are rewarded with 1 point per chatline
+- Users now are rewarded with .2 point per chatline
 - Fixed a bug where -compare chatlines {username} would break the bot
 - Added comparison between levels
+- Added a stats command which will show past 30 days hours and chatlines in stream
+
+1.23 - 
+- Fixed bug which would not correctly check for file existence
+- Added -give {username} {points}, can only be used to give points to streamer/bot so it is not abused
+- Fixed bug where level wouldnt be tracked per message
+- Fixed a bug where UID would be set to 0 in Hours DB
+- At one point removed ability for bots to be mods, corrected that behavior (and fixed a bug associated with it)
+- Updated Database interactions, now will only need one database as opposed to two
+- Added scaling database transactions, the more people in the stream the longer it will go before writing to DB next
