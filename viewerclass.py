@@ -28,11 +28,11 @@ class Viewer:
 
 
 def create_all_viewerobjects(getviewers, general):
-    print(getviewers)
+    #print(getviewers)
     for viewer in getviewers:
         if viewer not in general.viewer_objects:
             if sql_commands.get_uid_from_username(viewer) is False:
-                print(34, viewer)
+                #print(34, viewer)
                 pass
             else:
                 create_viewer = Viewer()

@@ -8,9 +8,6 @@ def get_commands(general):
     with open("MyFiles/bot_commands.txt") as f:
         x = f.readlines()
 
-    general.str_command_dict = {}  # this does not yet exist in bot.py
-    general.list_command_dict = {}
-
     for line in x:
         if line is None or line == "\n":
             pass

@@ -6,20 +6,17 @@ import time
 from twitchbot import twitchchat
 
 
-starting_val = '-'
-
-
 class TriviaQuestion:
     def __init__(self):
         self.question = ''
         self.question_list = []
         self.trivia_total_time = 0
-        self.trivia_time_start = time.time()
+        self.trivia_time_start = 0
         self.trivia_time_end = 0
         self.answered = False  # switch to determine if we need to get a new question or not
         self.was_question_asked = False
 
-        trivia_bool = False
+        self.trivia_bool = False
 
     def get_question(self, ourtrivia):
         self.question = trivia_qa(ourtrivia=ourtrivia)
@@ -49,7 +46,7 @@ def trivia_qa(ourtrivia):
     return forthread
 
 
-def trivia_question(s, message, ourtrivia):
+def trivia_question(s, message, ourtrivia, starting_val):
     if message.startswith(starting_val + 'trivia'):
         if ourtrivia.was_question_asked is False:
             if ourtrivia.answered is True:
@@ -61,10 +58,11 @@ def trivia_question(s, message, ourtrivia):
         print("The answer to this triviaquestion is -", ourtrivia.question[1])
         question = ourtrivia.question[0].rstrip()
         twitchchat.chat(s, question)
+        ourtrivia.trivia_time_start = time.time()
         ourtrivia.was_question_asked = True
 
 
-def trivia_answer(s, username, message, trivia_total_time, ourtrivia, general):
+def trivia_chat_answer(s, username, message, ourtrivia, general):
     answer = str(ourtrivia.question[1])
 
     if fuzz.ratio(answer.lower(), message.lower()) >= 87:
@@ -76,6 +74,15 @@ def trivia_answer(s, username, message, trivia_total_time, ourtrivia, general):
         ourtrivia.answered = True
         ourtrivia.was_question_asked = False
 
+
+def trivia_time_answer(s, ourtrivia, trivia_total_time):
+    answer = str(ourtrivia.question[1])
+
+    #print(81)
+    if ourtrivia.answered is True:
+        #print(82)
+        pass
+
     elif trivia_total_time > 30:
         if ourtrivia.trivia_bool is True:
             twitchchat.chat(s, 'No one guessed it right! The answer was: ' + answer)
@@ -83,5 +90,7 @@ def trivia_answer(s, username, message, trivia_total_time, ourtrivia, general):
             ourtrivia.trivia_total_time = 0
             ourtrivia.answered = True
             ourtrivia.was_question_asked = False
+            #print(91)
         else:
             ourtrivia.trivia_total_time = 0
+            #print(94)

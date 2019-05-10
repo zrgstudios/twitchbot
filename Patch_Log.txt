@@ -35,7 +35,7 @@ Known Bugs - Doing -trivia for first time will cause the question and answer to 
 - Added comparison between levels
 - Added a stats command which will show past 30 days hours and chatlines in stream
 
-1.23 - 
+1.23/1.24 - 
 - Fixed bug which would not correctly check for file existence
 - Added -give {username} {points}, can only be used to give points to streamer/bot so it is not abused
 - Fixed bug where level wouldnt be tracked per message
@@ -43,3 +43,32 @@ Known Bugs - Doing -trivia for first time will cause the question and answer to 
 - At one point removed ability for bots to be mods, corrected that behavior (and fixed a bug associated with it)
 - Updated Database interactions, now will only need one database as opposed to two
 - Added scaling database transactions, the more people in the stream the longer it will go before writing to DB next
+- Fixed bug where extremely large chat messages/foreign characters can break it
+- ADDED streamer_prefs.txt so streamers can turn off honor, points, trivia game and guessnumber game (trivia and guessnumber turned off, honor and points just don't save to database, so if viewers do the command when it's "off" they may still be able to see some temporary data which will be deleted when stream is turned off)
+- Added a max length for joinmessages of 240 characters
+
+1.24.2 - 
+- Fixed a small bug where everything in streamer_prefs would be set to off automatically
+
+1.24.3 - 
+- Added a way to hopefully catch a rare bug in our error_log.log
+
+1.24.4 - 
+- Fixed an error logging bug and fixed bug regarding -hours {game}
+- Fixed trivia bug (thanks to twitch user yegnaro), answer won't be given immediately after question for first time anymore
+
+1.25.0 -
+- Re-vamped error logging, will now be saved in our database (backup to .log file still though)
+- Emails sent for error logging now to work on errors easier (alpha)
+
+1.25.1 - 
+- Small bug in how moderators were updated when demoted to viewer, fixed
+- Fixed a bug where error logs were not sending correctly/at all
+
+1.25.2/3/4 - 
+- Found small bug in comparison for points that spits out obnoxiously large decimal point
+- Fixed a trivia bug where an answer would be shown as "wrong" in chat even after already answered
+- Resolved an issue where Anti-Virus could break the bot. PLEASE add an exception in your antivirus for the bot and if you have something akin to Avast MailShield add giphertius@gmail.com as a sender
+- The bot should never crash fully now without giving an error/ exit prompt
+- Small bug in error logging due to change
+- Removed extraneous print statements

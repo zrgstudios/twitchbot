@@ -5,10 +5,8 @@ from copy import deepcopy
 
 from twitchbot import (encryption_key,
                        current_game,
-                       twitchchat,
-                       )
+                       twitchchat)
 
-fkey = encryption_key.fkey
 channel_name = encryption_key.decrypted_chan
 
 
@@ -98,10 +96,10 @@ def insert_user(User_Name, User_Type, Join_Date, game):
 def get_table_columns():  # startup
     conn = sqlite3.connect(new_sql_file())
     c = conn.cursor()
-    sql_column_list = c.execute("PRAGMA table_info(ViewerData)")
-    string_column_list = sql_column_list.fetchall()
+    sql_ViewerData_column_list = c.execute("PRAGMA table_info(ViewerData)")
+    string_ViewerData_column_list = sql_ViewerData_column_list.fetchall()
     columns = []
-    for i in string_column_list:
+    for i in string_ViewerData_column_list:
         columns.append(i[1])
     if "Points" not in columns:
         c.execute("ALTER TABLE ViewerData ADD COLUMN Points INTEGER")
@@ -139,6 +137,50 @@ def check_table_names():  # startup
     if "Daily_Stats" not in table_list:
         c.execute("CREATE TABLE Daily_Stats (Entry_Number INTEGER PRIMARY KEY, UID INTEGER, Game STRING, Date STRING, "
                   "Seconds INTEGER, Chat INTEGER)")
+    if "Error_Log" not in table_list:
+        c.execute("CREATE TABLE Error_Log (Entry_Number INTEGER PRIMARY KEY, Date STRING, "
+                  "Time STRING, Error STRING, Sent STRING, Patch_Number STRING)")
+    conn.commit()
+    conn.close()
+
+
+def error_log_writing(general):
+    conn = sqlite3.connect(new_sql_file())
+    c = conn.cursor()
+    sql_entry_number = c.execute("SELECT MAX(Entry_Number) FROM Error_Log")
+    str_entry_number = sql_entry_number.fetchone()
+    if str_entry_number[0] is None or str_entry_number is None:
+        str_entry_number = 1
+    else:
+        str_entry_number = str_entry_number[0] + 1
+
+    if general.errors is not None:
+        for i in general.errors:
+            err_date = i[0]
+            err_time = i[1]
+            err_error = i[2]
+            c.execute("INSERT INTO Error_Log (Entry_Number, Date, Time, Error, Patch_Number) VALUES(?, ?, ?, ?, ?)",
+                      (str_entry_number, err_date, err_time, err_error, general.get_patchnumber()))
+            general.errors.remove(i)
+
+    conn.commit()
+    conn.close()
+
+
+def error_log_reading():
+    conn = sqlite3.connect(new_sql_file())
+    c = conn.cursor()
+    sql_all_errors = c.execute("SELECT * FROM Error_Log WHERE Sent IS NULL")
+    str_all_errors = sql_all_errors.fetchall()
+    conn.close()
+    return str_all_errors
+
+
+def error_sent(general):
+    conn = sqlite3.connect(new_sql_file())
+    c = conn.cursor()
+    for i in general.sent_errors:
+        c.execute("UPDATE Error_Log SET Sent=? WHERE Entry_Number=?", ("x", i,))
     conn.commit()
     conn.close()
 
@@ -213,15 +255,18 @@ def update_all_users_seconds(general, todaydate):
                                (str_entry_number, uid, game, todaydate, seconds))
                 else:
 
-                    sql_oldtime = c1.execute("SELECT Seconds FROM Daily_Stats WHERE UID=? AND Game=? AND Date=?", (uid,
-                                                                                                          game,
-                                                                                                          todaydate))
+                    sql_oldtime = c1.execute("SELECT Seconds FROM Daily_Stats WHERE UID=? AND Game=? AND Date=?",
+                                             (uid,
+                                              game,
+                                              todaydate))
                     string_oldtime = sql_oldtime.fetchone()
 
-                    c1.execute("UPDATE Daily_Stats SET Seconds=?+? WHERE UID=? AND Game=? AND Date=?", (string_oldtime[0],
-                                                                                               seconds, uid,
-                                                                                               game,
-                                                                                               todaydate))
+                    c1.execute("UPDATE Daily_Stats SET Seconds=?+? WHERE UID=? AND Game=? AND Date=?",
+                               (string_oldtime[0],
+                                seconds,
+                                uid,
+                                game,
+                                todaydate))
                     for game_original in general.viewer_objects[viewer].seconds:
                         if game == game_original:
                             general.viewer_objects[viewer].seconds[game] = 0
@@ -261,7 +306,8 @@ def update_user_chat_lines(date, general):  # this should grab an item from view
             else:
                 old_chatlines = string_old_chatlines[0]
             chat_line_total = old_chatlines + copy_of_viewerobjects[viewer].chat_line_dict.get(game)
-            c1.execute("UPDATE Daily_Stats SET Chat=? WHERE UID=? AND Game=? AND Date=?", (chat_line_total, uid, game, date))
+            c1.execute("UPDATE Daily_Stats SET Chat=? WHERE UID=? AND Game=? AND Date=?", (chat_line_total, uid, game,
+                                                                                           date))
             general.viewer_objects[viewer].chat_line_dict[game] = 0
     conn1.commit()
     conn1.close()
@@ -277,34 +323,35 @@ def update_user_points(general):
     copy_of_viewerobjects = deepcopy(general.viewer_objects)
 
     for viewer in copy_of_viewerobjects:
-        for game in copy_of_viewerobjects[viewer].seconds:
-            # game = 0, day = 1, time = 2, username = 3
-            if game == "Offline":
-                points = 0.001 * general.viewer_objects[viewer].seconds.get(game)
-                general.viewer_objects[viewer].honor += general.viewer_objects[viewer].seconds.get(game) * .005
-            else:
-                points = 0.016 * general.viewer_objects[viewer].seconds.get(game)
-                general.viewer_objects[viewer].honor += general.viewer_objects[viewer].seconds.get(game) * .05
-            sql_oldpoints = c.execute("SELECT Points FROM ViewerData WHERE User_Name=?", (viewer,))
-            string_oldpoints = sql_oldpoints.fetchone()[0]
-            total_points = float(string_oldpoints) + float(points) + general.viewer_objects[viewer].points
-            c.execute("UPDATE ViewerData SET Points=? WHERE User_Name=?",
-                      (total_points, viewer))
-            general.viewer_objects[viewer].points = 0
+        if general.points_bool is True:
+            for game in copy_of_viewerobjects[viewer].seconds:
+                # game = 0, day = 1, time = 2, username = 3
+                if game == "Offline":
+                    points = 0.001 * general.viewer_objects[viewer].seconds.get(game)
+                    general.viewer_objects[viewer].honor += general.viewer_objects[viewer].seconds.get(game) * .005
+                else:
+                    points = 0.016 * general.viewer_objects[viewer].seconds.get(game)
+                    general.viewer_objects[viewer].honor += general.viewer_objects[viewer].seconds.get(game) * .05
+                sql_oldpoints = c.execute("SELECT Points FROM ViewerData WHERE User_Name=?", (viewer,))
+                string_oldpoints = sql_oldpoints.fetchone()[0]
+                total_points = float(string_oldpoints) + float(points) + general.viewer_objects[viewer].points
+                c.execute("UPDATE ViewerData SET Points=? WHERE User_Name=?",
+                          (total_points, viewer))
+                general.viewer_objects[viewer].points = 0
 
         # above is for points below is for honor
 
-        sql_old_honor = c.execute("SELECT Honor FROM ViewerData WHERE User_Name=?", (viewer,))
-        str_old_honor = sql_old_honor.fetchone()
-        if str_old_honor is None or str_old_honor[0] is None:
-            str_old_honor = 0
-        else:
-            str_old_honor = str_old_honor[0]
-        #print(str_old_honor, 328)
-        #print()
-        combined_honor = str_old_honor + general.viewer_objects[viewer].honor
-        c.execute("UPDATE ViewerData SET Honor=? WHERE User_Name=?", (combined_honor, viewer))
-        general.viewer_objects[viewer].honor = 0
+        if general.honor_bool is True:
+            sql_old_honor = c.execute("SELECT Honor FROM ViewerData WHERE User_Name=?", (viewer,))
+            str_old_honor = sql_old_honor.fetchone()
+            if str_old_honor is None or str_old_honor[0] is None:
+                str_old_honor = 0
+            else:
+                str_old_honor = str_old_honor[0]
+            #print(str_old_honor, 328)
+            combined_honor = str_old_honor + general.viewer_objects[viewer].honor
+            c.execute("UPDATE ViewerData SET Honor=? WHERE User_Name=?", (combined_honor, viewer))
+            general.viewer_objects[viewer].honor = 0
     conn.commit()
     conn.close()
     # except (TypeError, sqlite3.OperationalError) as e:
@@ -318,12 +365,13 @@ def update_trivia_points(general):
         trivia_points = general.viewer_objects[username].trivia_answers
         if trivia_points > 0:
             sql_trivia_points = c.execute("SELECT Trivia_Answers FROM ViewerData WHERE User_Name=?", (username,))
-            str_trivia_points = sql_trivia_points.fetchone()[0]
-            if str_trivia_points[0] is None:
+            str_trivia_points = sql_trivia_points.fetchone()
+            if str_trivia_points is None or str_trivia_points[0] is None:
                 str_trivia_points = 0
             else:
                 str_trivia_points = str_trivia_points[0]
             c.execute("UPDATE ViewerData SET Trivia_Answers=? WHERE User_Name=?", (str_trivia_points, username,))
+            general.viewer_objects[username].trivia_answers = 0
     conn.commit()
     conn.close()
 
@@ -626,7 +674,11 @@ def check_mods(general):  # bots should be able to be mods
             c.execute("UPDATE ViewerData SET User_Type = 'Moderator' WHERE User_Name = ?", (i,))
 
         if i not in general.get_viewers_func[1]:
-            c.execute("UPDATE ViewerData SET User_Type='Viewer' WHERE User_Name=?", (i,))
+            if i == "zerg3rr" or i == encryption_key.decrypted_chan:
+                pass
+            else:
+                if i in general.get_viewers_func[0]:
+                    c.execute("UPDATE ViewerData SET User_Type='Viewer' WHERE User_Name=?", (i,))
 
     conn.commit()
     conn.close()

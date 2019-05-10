@@ -15,7 +15,8 @@ MessageNum, UID, Date, Time, Message, Game
 """
 
 import sqlite3
-import encryption_key
+
+from twitchbot import encryption_key
 
 
 def new_sql_file():
@@ -95,12 +96,19 @@ def copy_viewerdata():
         else:
             str_join_game = str_join_game[0]
 
-        #sql_user_check = c1.execute("SELECT UID FROM ViewerData WHERE User_Name='zerg3rr'")
+        #sql_user_check = c1.execute("SELECT User_Name FROM ViewerData WHERE UID=?", (uid[0],))
         #str_user_check = sql_user_check.fetchone()
         if str(uid[0]) == '12358132':
-            pass
+            c1.execute('UPDATE ViewerData '
+                       'SET Honor=?, Join_Message=?, Points=?, Last_Seen=?, Invited_By=?, Join_Game=?'
+                       'WHERE UID=?', (str_honor,
+                                       str_join_message,
+                                       str_points,
+                                       str_last_seen,
+                                       str_invited_by,
+                                       str_join_game,
+                                       uid[0]))
         else:
-            print(uid)
             c1.execute('INSERT INTO ViewerData(UID, User_Name, User_Type, Honor, Join_Message, Join_Date, '
                        'Join_Date_Check, Points, Last_Seen, Invited_By, Join_Game) '
                        'VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (uid[0],
@@ -127,7 +135,7 @@ def copy_hoursdata():
     sql_all_hours_data = c2.execute("SELECT * FROM Hours")
     str_all_hours_data = sql_all_hours_data.fetchall()
     for item in str_all_hours_data:
-        print(229, item)
+        #print(229, item)
         uid = item[0]
         game = item[1]
         date = item[2]
@@ -147,7 +155,7 @@ def copy_hoursdata():
     sql_all_viewer_chat_data = c2.execute("SELECT * FROM viewer_chat")
     str_all_viewer_chat_data = sql_all_viewer_chat_data.fetchall()
     for item in str_all_viewer_chat_data:
-        print(249, item)
+        #print(249, item)
         MessageNum = item[0]
         UID = item[1]
         Date = item[2]
