@@ -77,14 +77,7 @@ class General:
         self.errors = []
         self.sent_errors = []
         self.connected = False
-        self.ping_timer = time.time()
-
-    def get_patchnumber(self):
-        version_number = str(os.path.basename(__file__))
-        """for i in os.listdir("./"):
-            if "win_twitchbot" in i:
-                version_number = re.search("([0-9])(.*)([0-9])", i).group(0)"""
-        return version_number
+        self.version_number = "1.25.5"
 
     def create_num(self):
         ourval = random.randrange(0, 100)
@@ -266,10 +259,9 @@ def timefunctions():  # make a counter here so not multiple saves occur
     if general.get_viewers_func is False:
         general.get_viewers_func = get_viewers()
 
-    s = general.oursocket
     while True:
+        #print(275)
         if int(general.total_hourstime) % 10 == 0:
-            #print(277, general.total_hourstime)
 
             general.get_viewers_func = get_viewers()
             sql_commands.check_if_user_exists(
@@ -281,6 +273,7 @@ def timefunctions():  # make a counter here so not multiple saves occur
                 if general.viewer_objects[viewer].join_message_check is False:
                     pass
                 else:
+                    s = general.oursocket
                     sql_commands.welcome_viewers(
                         s=s,
                         general=general,
@@ -302,7 +295,6 @@ def timefunctions():  # make a counter here so not multiple saves occur
                 sql_commands.update_user_points(general=general)
                 sql_commands.update_user_chat_lines(
                     date=general.todaydate, general=general)
-
                 sql_commands.check_users_joindate(
                     general.get_viewers_func[0] +
                     general.get_viewers_func[1])
@@ -326,7 +318,7 @@ def timefunctions():  # make a counter here so not multiple saves occur
                 general.total_hourstime = 0
                 # should be on a separate thread
         else:
-            time.sleep(.5)  # sleeping to reduce load on cpu
+            time.sleep(.1)  # sleeping to reduce load on cpu
 
 
 def saveviewerchat():
@@ -617,7 +609,7 @@ def main():  # printing @badges line once, and sometimes skipping messages is a 
             return False
         else:
             get_commands.get_commands(general)
-            print("Version number is - ", general.get_patchnumber())
+            print("Version number is -", general.version_number)
             error_log()
             logging.info(general.todaydate + " " + formatted_time() + " Startup of bot")
             general.oursocket = connect_socket()

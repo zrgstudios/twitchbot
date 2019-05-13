@@ -1,6 +1,7 @@
 import sqlite3
 import datetime
 import requests
+import re
 from copy import deepcopy
 
 from twitchbot import (encryption_key,
@@ -156,11 +157,12 @@ def error_log_writing(general):
 
     if general.errors is not None:
         for i in general.errors:
-            err_date = i[0]
-            err_time = i[1]
-            err_error = i[2]
+            err_date = str(i[0])
+            err_time = str(i[1])
+            err_error = str(i[2])
+            version_number = general.version_number
             c.execute("INSERT INTO Error_Log (Entry_Number, Date, Time, Error, Patch_Number) VALUES(?, ?, ?, ?, ?)",
-                      (str_entry_number, err_date, err_time, err_error, general.get_patchnumber()))
+                      (str_entry_number, err_date, err_time, err_error, version_number))
             general.errors.remove(i)
 
     conn.commit()

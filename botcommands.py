@@ -10,7 +10,8 @@ from twitchbot import (
     encryption_key,
     current_game,
     sql_commands,
-    viewerclass,)
+    viewerclass,
+    send_email,)
 
 
 def sql_file():
@@ -36,10 +37,14 @@ def handle_commands(s, username, message, general):
 
                 message_regex = re.search(r"(" + starting_val + "joinmessage .+)", message)
                 join_message = message_regex.group(0).split(" ", 1)[1].strip() + ' - ' + username
-                general.viewer_objects[username].join_message_check = join_message
-                twitchchat.chat(s, username + ', your message has been saved at the cost of 1000 points!')
-                if username in general.no_joinmessage:
-                    general.no_joinmessage.remove(username)
+                if len(join_message) > 240:
+                    general.viewer_objects[username].points += 1000
+                    twitchchat.chat(s, "Sorry your join message cant be longer than 240 characters")
+                else:
+                    general.viewer_objects[username].join_message_check = join_message
+                    twitchchat.chat(s, username + ', your message has been saved at the cost of 1000 points!')
+                    if username in general.no_joinmessage:
+                        general.no_joinmessage.remove(username)
         except AttributeError as e:
             pass
             #print(44, e)
@@ -105,7 +110,8 @@ def handle_commands(s, username, message, general):
                 elif game == 'SC2':
                     game = 'StarCraftII'
 
-                sql_game = c1.execute('SELECT Seconds FROM Daily_Stats WHERE Game=? AND UID=?', (game.capitalize(), string_uid[0]))
+                sql_game = c1.execute('SELECT Seconds FROM Daily_Stats WHERE Game=? AND UID=?', (game,
+                                                                                                 string_uid[0]))
                 string_game = sql_game.fetchall()
                 for i in string_game:
                     hl.append(i[0])
@@ -113,6 +119,7 @@ def handle_commands(s, username, message, general):
                 current_seconds = general.viewer_objects[username].seconds.get(game)
                 if current_seconds is None:
                     current_seconds = 0
+                    # general.viewer_objects[username].seconds[game] = 0
 
                 hl = round((sum(hl) / 60) / 60 + (current_seconds / 60) / 60, 2)
 
@@ -129,14 +136,17 @@ def handle_commands(s, username, message, general):
                     total_seconds = 0
                     for game in general.viewer_objects[username].seconds:
                         total_seconds += general.viewer_objects[username].seconds.get(game)
+                        # print(total_seconds)
 
                     for i in string_hours:
                         hours_list.append(i[0])
                     total_hours = round((sum(hours_list)/60)/60 + (total_seconds / 60) / 60, 2)
                     twitchchat.chat(s, username + ' your total online hours are: ' + str(total_hours))
                     count += 1
-                except TypeError:
-                    twitchchat.chat(s, 'Please wait a minute' + username + ', we are still adding you to the database!')
+                except TypeError as e:
+                    # print(e)
+                    twitchchat.chat(s, 'Please wait a minute ' + username +
+                                    ', we are still adding you to the database!')
 
             conn1.close()
 
@@ -174,7 +184,7 @@ def handle_commands(s, username, message, general):
         string_user_points = sql_user_points.fetchone()
         string_user_points = round(string_user_points[0], 2)
         twitchchat.chat(s, username + " you have " + str(string_user_points +
-                                                         round(general.viewer_objects[username].points)) + " points!")
+                        round(general.viewer_objects[username].points, 2)) + " points!")
         conn.close()
 
     elif message.startswith(starting_val + "compare"):
@@ -201,7 +211,8 @@ def handle_commands(s, username, message, general):
                     difference = (abs(int(string_points1[0]) + general.viewer_objects[username].points - int
                                   (string_points2[0]) + general.viewer_objects[sec_username].points))
                 twitchchat.chat(s, username + " has " + str(round(string_points1[0], 2)) + ", " + sec_username + " has "
-                                + str(round(string_points2[0], 2)) + ", that's a difference of " + str(difference))
+                                + str(round(string_points2[0], 2)) + ", that's a difference of " +
+                                str(round(difference, 2)))
                 conn.close()
 
             elif keyword == "Honor":
@@ -356,18 +367,24 @@ def handle_commands(s, username, message, general):
     elif message.startswith(starting_val + "testme"):
         conn = sqlite3.connect(sql_file())
         c = conn.cursor()
-        sql_mod_check = c.execute("SELECT User_Type FROM ViewerData WHERE User_Name = ?", (username,))
-        string_mod_check = sql_mod_check.fetchone()
-        if string_mod_check[0] == "Moderator" or string_mod_check[0] == "Streamer":
-            sql_mod_points = c.execute("SELECT Points FROM ViewerData WHERE User_Name = ?", (username,))
-            string_mod_points = sql_mod_points.fetchone()
-            mod_points = int(string_mod_points[0]) - random.randrange(30, 500)
-            general.viewer_objects[username].points -= 10
-            twitchchat.chat(s, "Whoops, looks like you lost some points there " + username + "! You went from " +
-                            str(round(string_mod_points[0], 2)) + " to " + str(round(mod_points, 2)))
-            conn.commit()
-        else:
-            twitchchat.chat(s, "/timeout " + username + " " + str(random.randrange(30, 500)))
+        try:
+            sql_mod_check = c.execute("SELECT User_Type FROM ViewerData WHERE User_Name = ?", (username,))
+            string_mod_check = sql_mod_check.fetchone()
+            our_rand_num = random.randrange(1, 500)
+            if string_mod_check[0] == "Moderator" or string_mod_check[0] == "Streamer" or \
+                    string_mod_check[0] == "Creator":
+                sql_mod_points = c.execute("SELECT Points FROM ViewerData WHERE User_Name = ?", (username,))
+                string_mod_points = sql_mod_points.fetchone()
+                mod_points = int(string_mod_points[0]) - our_rand_num
+                general.viewer_objects[username].points -= mod_points
+                twitchchat.chat(s, "Whoops, looks like you lost some points there " + username + "! You went from " +
+                                str(round(string_mod_points[0], 2)) + " to " + str(round(mod_points, 2)))
+
+            else:
+                twitchchat.chat(s, "/timeout " + username + " " + str(our_rand_num))
+                twitchchat.chat(s, "Oops, see you in " + our_rand_num + " seconds!")
+        except TypeError:
+            pass  # this is only here because arzon is getting an error in his stream when he tries it, no fkin clue why
         conn.close()
 
     elif message.startswith(starting_val + "game") or message.startswith(starting_val + "Game"):
@@ -432,20 +449,21 @@ def handle_commands(s, username, message, general):
             twitchchat.chat(s, ".w " + username + " Your code is " + rewardval)
 
     elif message.startswith(starting_val + 'gn'):
-        guess_regex = re.search(f"({starting_val}gn \d+)", message)
-        try:
-            guess = guess_regex.group(0).split(" ")[1]
-            if int(guess) > int(general.randnum):
-                twitchchat.chat(s, 'Number is too high! Try guessing lower ' + username)
+        if general.gn_bool is True:
+            guess_regex = re.search(f"({starting_val}gn \d+)", message)
+            try:
+                guess = guess_regex.group(0).split(" ")[1]
+                if int(guess) > int(general.randnum):
+                    twitchchat.chat(s, 'Number is too high! Try guessing lower ' + username)
 
-            elif int(guess) < int(general.randnum):
-                twitchchat.chat(s, 'Number is too low! Try guessing higher ' + username)
+                elif int(guess) < int(general.randnum):
+                    twitchchat.chat(s, 'Number is too low! Try guessing higher ' + username)
 
-            elif int(guess) == int(general.randnum):
-                twitchchat.chat(s, "Nice guess! The answer was " + str(general.randnum))
-                general.create_num()
-        except AttributeError:
-            twitchchat.chat(s, 'You have to include a number ' + username)
+                elif int(guess) == int(general.randnum):
+                    twitchchat.chat(s, "Nice guess! The answer was " + str(general.randnum))
+                    general.create_num()
+            except AttributeError:
+                twitchchat.chat(s, 'You have to include a number ' + username)
 
     elif message.startswith(starting_val + 'update_id'):
         try:
@@ -541,13 +559,13 @@ def handle_commands(s, username, message, general):
         today = str(datetime.datetime.today().date())
         uid = sql_commands.get_uid_from_username(username)
 
-        sql_hours_last_30_days = c.execute("SELECT Seconds FROM Daily_Stats WHERE UID=? AND (Day BETWEEN ? AND ?)",
+        sql_hours_last_30_days = c.execute("SELECT Seconds FROM Daily_Stats WHERE UID=? AND (Date BETWEEN ? AND ?)",
                                            (uid,
                                             thirty_days_ago,
                                             today))
         str_hours_last_30_days = sql_hours_last_30_days.fetchall()
 
-        sql_chatlines_last_30_days = c.execute("SELECT Chat FROM Daily_Stats WHERE UID=? AND (Day BETWEEN ? AND ?)",
+        sql_chatlines_last_30_days = c.execute("SELECT Chat FROM Daily_Stats WHERE UID=? AND (Date BETWEEN ? AND ?)",
                                                (uid,
                                                 thirty_days_ago,
                                                 today))
@@ -594,7 +612,7 @@ def handle_commands(s, username, message, general):
                             general.viewer_objects[sec_username].points += int(give_amount)
                             twitchchat.chat(s, "%s you have given %s to %s" % (username, give_amount, sec_username))
                         else:
-                            print(encryption_key.decrypted_chan, encryption_key.decrypted_nick)
+                            #print(encryption_key.decrypted_chan, encryption_key.decrypted_nick)
                             twitchchat.chat(s, "As of right now you can only give points to the streamer or the bot")
                 conn.close()
         except IndexError:
@@ -603,6 +621,15 @@ def handle_commands(s, username, message, general):
             twitchchat.chat(s, "%s the person you are giving points to must be in the stream" % username)
         except ValueError:
             twitchchat.chat(s, "%s you must use the correct format of -give {username} {###}" % username)
+
+    elif message.startswith(starting_val + "send errors"):
+        conn = sqlite3.connect(sql_file())
+        c = conn.cursor()
+        sql_usertype = c.execute("SELECT User_Type FROM ViewerData WHERE User_Name=?", (username,))
+        str_usertype = sql_usertype.fetchone()
+        if str_usertype[0] == "Streamer" or str_usertype[0] == "Creator":
+            send_email.send_email()
+        conn.close()
 
     for command in general.list_command_dict:
         if message.startswith(command.strip()):

@@ -72,3 +72,11 @@ Known Bugs - Doing -trivia for first time will cause the question and answer to 
 - The bot should never crash fully now without giving an error/ exit prompt
 - Small bug in error logging due to change
 - Removed extraneous print statements
+
+1.25.5 - 
+- Significantly reduced load on CPU when running bot
+- Updated how the patchnumber is retrieved for error logging
+- Print statement to show which version you are on
+
+1.25.6 - 
+- Changed how version number is retrieved, moving forward the name will always be win_twitchbot.exe (the patch number will print on application startup)
