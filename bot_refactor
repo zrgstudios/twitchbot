@@ -33,7 +33,7 @@ def connect_socket(streamer):
     sock.send(
         f'CAP REQ :twitch.tv/membership twitch.tv/tags twitch.tv/commands\r\n'.encode('utf-8'))
     sock.send("PASS {}\r\n".format(encryption_key.decrypted_pass).encode('utf-8'))  # password
-    sock.send("NICK {zerg3rrbot}\r\n".encode('utf-8'))  # bot name
+    sock.send("NICK #zerg3rrbot\r\n".encode('utf-8'))  # bot name
     sock.send(f"JOIN #{streamer}\r\n".encode('utf-8'))
     return sock
 
@@ -57,7 +57,6 @@ def handle_response(streamer):
         # decode the received message through utf-8, ignore non-utf-8 characters
         response = sock.recv(1024).decode('utf-8', 'ignore')
 
-
         # if response is 0 connection is lost, reset connection
         if len(response) == 0:
             streamer.stream_socket.close()
@@ -65,7 +64,7 @@ def handle_response(streamer):
 
         # if PING in response we need to reply pong to keep connection open
         elif "PING :tmi.twitch.tv\r\n" in response:
-            print(f"PING FROM {streamer} SENDING PONG")
+            # print(f"PING FROM {streamer} SENDING PONG")
             sock.send("PONG :tmi.twitch.tv\r\n".encode('utf-8'))
             time.sleep(1 / (20 / 30))
 
@@ -85,8 +84,8 @@ def handle_response(streamer):
             # need to find a way to regex this so that if PART or JOIN in message doesn't skip
             # adding message to bot
 
-            if "PRIVMSG" in response:
-                print(response)
+            elif "PRIVMSG" in response:
+                #print(response)
                 for i in response.split("@badges"):
                     compile_match = full_regex.search(i)
                     if compile_match is not None:
@@ -105,20 +104,30 @@ def handle_response(streamer):
                     print(f"{username} left {streamer}'s channel!")
 
 
+def handle_chat_message(streamer):
+
+    # this while true is here because it cannot be in handle response since we return the
+    # message/streamer/viewer from that function
+    while True:
+        handle_response(streamer)
+
+
 def main():
-    list_of_streamers = ["zerg3rr", "i0ki" "ridgure", "elamite", "theasianmagikarp", "mexisean",
-                         "samosel", "thekillerbeau0068", "cryophoenix117", "int_surgency"]
+    list_of_streamers = ["zerg3rr", "i0ki", "ridgure", "elamite", "theasianmagikarp", "mexisean",
+                         "samosel", "thekillerbeau0068", "cryophoenix117", "int_surgency",
+                         "shyb0y", "newjumper", "badabingboumpow", "faultlessking", "innesyyz",
+                         "inefficient_sloth", "cbennett1212"]
 
     online_streamers = {}
     async_array = []
 
     for streamer in list_of_streamers:
-        if current_game.is_streamer_online(streamer):
+        if current_game.is_streamer_online(streamer) != "Offline":
             if streamer not in online_streamers:
                 online_streamers[streamer] = StreamerObj(streamer)
                 online_streamers[streamer].name = streamer
                 threading.Thread(name=streamer,
-                                 target=handle_response,
+                                 target=handle_chat_message,
                                  args=(online_streamers[streamer],)).start()
                 # async_array.append(handle_response(online_streamers[streamer]))
 
